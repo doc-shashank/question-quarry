@@ -1,0 +1,4 @@
+- [x] Fix `FileProvider` meta-data in `AndroidManifest.xml`
+- [x] Increment Room database version in `QuestionQuarryDatabase.kt`
+- [x] Fix `fallbackToDestructiveMigration()` in `MainActivity.kt`
+- [x] Verify build
