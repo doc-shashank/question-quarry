@@ -28,6 +28,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import opensource.qwx.questionquarry.BuildConfig
 import opensource.qwx.questionquarry.util.DatabaseUtils
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -35,13 +36,13 @@ import opensource.qwx.questionquarry.util.DatabaseUtils
 fun SettingsScreen(
     viewModel: ThemeViewModel,
     onBack: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle(initialValue = ThemeMode.SYSTEM)
     val colorSchemeId by viewModel.colorSchemeId.collectAsStateWithLifecycle(initialValue = ColorSchemeId.DEFAULT)
 
-    var showExportDialog by remember { mutableStateOf(false) }
+    var showExportDialog by remember { mutableStateOf(value = false) }
     var showImportDialog by remember { mutableStateOf(false) }
 
     val exportLauncher = rememberLauncherForActivityResult(
@@ -100,9 +101,8 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.secondary
                     )
                     ThemeSelector(
-                        selectedMode = themeMode,
-                        onModeSelected = { viewModel.setThemeMode(it) }
-                    )
+                        selectedMode = themeMode
+                    ) { viewModel.setThemeMode(it) }
 
                     Spacer(modifier = Modifier.height(8.dp))
 
@@ -158,7 +158,7 @@ fun SettingsScreen(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Version 1.0.0",
+                            text = "Version ${BuildConfig.VERSION_NAME}",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -301,7 +301,7 @@ fun ColorSchemeOption(
 @Composable
 fun ThemeSelector(
     selectedMode: ThemeMode,
-    onModeSelected: (ThemeMode) -> Unit
+    onModeSelected: (ThemeMode) -> Unit,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),

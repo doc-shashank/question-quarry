@@ -1,6 +1,5 @@
 package opensource.qwx.questionquarry.ui.components
 
-import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateContentSize
@@ -43,12 +42,12 @@ import androidx.compose.ui.text.style.TextAlign
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CanvasEditor(
+    modifier: Modifier = Modifier,
     blocks: List<CanvasBlock>,
     onBlocksChange: (List<CanvasBlock>) -> Unit,
     onEditText: (Int) -> Unit = {},
-    modifier: Modifier = Modifier,
     isReadOnly: Boolean = false,
-    isScrollable: Boolean = true
+    isScrollable: Boolean = true,
 ) {
     val context = LocalContext.current
     val storageManager = remember { StorageManager(context) }
@@ -67,7 +66,7 @@ fun CanvasEditor(
 
     var previousSize by remember { mutableIntStateOf(blocks.size) }
     LaunchedEffect(blocks.size) {
-        if (blocks.size > previousSize && isScrollable) {
+        if ((blocks.size > previousSize) && (isScrollable)) {
             listState.animateScrollToItem(blocks.size)
         }
         previousSize = blocks.size
@@ -198,7 +197,7 @@ fun CanvasEditor(
                                 } else Modifier
                             )
                     ) {
-                        val textCount = blocks.take(index).count { it is CanvasBlock.Text } + 1
+                        val textCount = blocks.asSequence().take(index).count { it is CanvasBlock.Text } + 1
                         val imageCount = blocks.take(index).count { it is CanvasBlock.Image } + 1
                         val label = when (block) {
                             is CanvasBlock.Text -> "Text $textCount"
@@ -291,7 +290,7 @@ fun AddBlockRow(
     onAddText: () -> Unit,
     onAddImage: () -> Unit
 ) {
-    var isExpanded by remember { mutableStateOf(false) }
+    var isExpanded by remember { mutableStateOf(value = false) }
 
     Row(
         modifier = Modifier

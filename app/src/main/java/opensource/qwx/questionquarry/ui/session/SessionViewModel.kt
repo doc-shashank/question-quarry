@@ -13,6 +13,8 @@ import kotlinx.coroutines.launch
 import opensource.qwx.questionquarry.data.local.dao.BlockDao
 import opensource.qwx.questionquarry.data.local.entity.Block
 import opensource.qwx.questionquarry.data.local.entity.BlockType
+import opensource.qwx.questionquarry.data.local.entity.Preset
+import opensource.qwx.questionquarry.data.local.entity.PresetType
 import opensource.qwx.questionquarry.data.local.entity.Session
 import opensource.qwx.questionquarry.data.local.entity.SessionStatus
 import opensource.qwx.questionquarry.data.cache.SessionCache
@@ -24,12 +26,12 @@ class SessionViewModel(private val blockDao: BlockDao) : ViewModel() {
 
     private val sessionCache = SessionCache(10)
 
-    var isLoading by mutableStateOf(false)
+    var isLoading by mutableStateOf(value = false)
         private set
 
     data class QAPair(
         val questionBlocks: List<CanvasBlock>,
-        val answerBlocks: List<CanvasBlock>
+        val answerBlocks: List<CanvasBlock>,
     )
 
     var draftPairs by mutableStateOf(listOf(QAPair(emptyList(), emptyList())))
@@ -74,15 +76,18 @@ class SessionViewModel(private val blockDao: BlockDao) : ViewModel() {
     val topics = blockDao.getDistinctTopics()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val presetSubjects = blockDao.getAllSubjects()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     fun getRecommendations(query: String, type: RecommendationType): List<String> {
         if (query.isBlank()) return emptyList()
         val list = when (type) {
-            RecommendationType.SUBJECT -> subjects.value
+            RecommendationType.SUBJECT -> (subjects.value + presetSubjects.value.map { it.name }).distinct()
             RecommendationType.CHAPTER_NUMBER -> chapterNumbers.value
             RecommendationType.CHAPTER_NAME -> chapterNames.value
             RecommendationType.TOPIC -> topics.value
         }
-        return list.filter { it.contains(query, ignoreCase = true) }.take(5)
+        return list.asSequence().filter { it.contains(query, ignoreCase = true) }.take(5).toList()
     }
 
     enum class RecommendationType {
@@ -109,7 +114,7 @@ class SessionViewModel(private val blockDao: BlockDao) : ViewModel() {
         val daysInMonth = monthCalendar.getActualMaximum(Calendar.DAY_OF_MONTH)
 
         val days = mutableListOf<Calendar?>()
-        for (i in 0 until firstDayOfWeek) {
+        repeat(firstDayOfWeek) {
             days.add(null)
         }
         for (i in 1..daysInMonth) {
@@ -166,12 +171,12 @@ class SessionViewModel(private val blockDao: BlockDao) : ViewModel() {
         
         if (isQuestion) {
             val newBlocks = pair.questionBlocks.map { 
-                if (it.id == blockId && it is CanvasBlock.Text) it.copy(content = newContent) else it
+                if ((it.id == blockId) && (it is CanvasBlock.Text)) it.copy(content = newContent) else it
             }
             newPairs[pairIndex] = pair.copy(questionBlocks = newBlocks)
         } else {
             val newBlocks = pair.answerBlocks.map { 
-                if (it.id == blockId && it is CanvasBlock.Text) it.copy(content = newContent) else it
+                if ((it.id == blockId) && (it is CanvasBlock.Text)) it.copy(content = newContent) else it
             }
             newPairs[pairIndex] = pair.copy(answerBlocks = newBlocks)
         }
@@ -208,17 +213,26 @@ class SessionViewModel(private val blockDao: BlockDao) : ViewModel() {
         return blockDao.getSessionsByDateRange(start, end)
     }
 
-    fun getSessionsForToday(): Flow<List<Session>> {
+    fun getRecentSessions(): Flow<List<Session>> {
         val calendar = Calendar.getInstance()
         calendar.set(Calendar.HOUR_OF_DAY, 0)
         calendar.set(Calendar.MINUTE, 0)
         calendar.set(Calendar.SECOND, 0)
-        val startOfDay = calendar.timeInMillis
-        calendar.set(Calendar.HOUR_OF_DAY, 23)
-        calendar.set(Calendar.MINUTE, 59)
-        calendar.set(Calendar.SECOND, 59)
-        val endOfDay = calendar.timeInMillis
-        return blockDao.getSessionsForToday(startOfDay, endOfDay)
+        calendar.add(Calendar.DAY_OF_YEAR, -3) // Last 3 days
+        val startOfRecent = calendar.timeInMillis
+        
+        val now = Calendar.getInstance().timeInMillis
+        return blockDao.getSessionsByDateRange(startOfRecent, now)
+    }
+
+    fun deleteSessions(sessionIds: List<Long>) {
+        viewModelScope.launch {
+            sessionIds.forEach { id ->
+                val session = blockDao.getSessionByIdSync(id)
+                blockDao.deleteSession(session)
+                sessionCache.remove(id)
+            }
+        }
     }
 
     fun getDueSessions(): Flow<List<Session>> {
@@ -229,6 +243,27 @@ class SessionViewModel(private val blockDao: BlockDao) : ViewModel() {
 
     fun getSessionsBySubjectAndChapter(subject: String, chapter: String?): Flow<List<Session>> = 
         blockDao.getSessionsBySubjectAndChapter(subject, chapter)
+
+    fun getChaptersForSubject(subjectId: Long): Flow<List<Preset>> = blockDao.getChaptersForSubject(subjectId)
+    fun getTopicsForChapter(chapterId: Long): Flow<List<Preset>> = blockDao.getTopicsForChapter(chapterId)
+
+    fun createPreset(name: String, type: PresetType, parentId: Long? = null) {
+        viewModelScope.launch {
+            blockDao.insertPreset(Preset(name = name, type = type, parentId = parentId))
+        }
+    }
+
+    fun renamePreset(preset: Preset, newName: String) {
+        viewModelScope.launch {
+            blockDao.updatePreset(preset.copy(name = newName))
+        }
+    }
+
+    fun deletePreset(preset: Preset) {
+        viewModelScope.launch {
+            blockDao.deletePreset(preset)
+        }
+    }
 
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     fun getSessionDetail(sessionId: Long): Flow<Pair<Session, List<QAPair>>> {
@@ -241,13 +276,9 @@ class SessionViewModel(private val blockDao: BlockDao) : ViewModel() {
             // Actually, the cache stores Session objects. 
             // The task says "When loading a session, first check the cache. If not present, fetch from Room and update the cache."
             
-            val sessionFlow = if (cached != null) {
-                flowOf(cached)
-            } else {
-                blockDao.getSessionById(sessionId).onEach { 
+            val sessionFlow = cached?.let { flowOf(it) } ?: blockDao.getSessionById(sessionId).onEach { 
                     sessionCache.put(it)
                 }
-            }
             
             emitAll(
                 sessionFlow.flatMapLatest { session ->

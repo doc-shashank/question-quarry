@@ -8,6 +8,7 @@ import androidx.room.Query
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 import opensource.qwx.questionquarry.data.local.entity.Block
+import opensource.qwx.questionquarry.data.local.entity.Preset
 import opensource.qwx.questionquarry.data.local.entity.Session
 
 @Dao
@@ -74,4 +75,22 @@ interface BlockDao {
 
     @Query("SELECT * FROM sessions WHERE subject = :subject AND (chapterName = :chapter OR (chapterName IS NULL AND :chapter IS NULL))")
     fun getSessionsBySubjectAndChapter(subject: String, chapter: String?): Flow<List<Session>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPreset(preset: Preset): Long
+
+    @Update
+    suspend fun updatePreset(preset: Preset)
+
+    @Delete
+    suspend fun deletePreset(preset: Preset)
+
+    @Query("SELECT * FROM presets WHERE type = 'SUBJECT'")
+    fun getAllSubjects(): Flow<List<Preset>>
+
+    @Query("SELECT * FROM presets WHERE type = 'CHAPTER' AND parentId = :subjectId")
+    fun getChaptersForSubject(subjectId: Long): Flow<List<Preset>>
+
+    @Query("SELECT * FROM presets WHERE type = 'TOPIC' AND parentId = :chapterId")
+    fun getTopicsForChapter(chapterId: Long): Flow<List<Preset>>
 }

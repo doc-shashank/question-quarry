@@ -19,8 +19,7 @@ import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
@@ -40,6 +39,7 @@ import opensource.qwx.questionquarry.ui.session.NewSessionScreen
 import opensource.qwx.questionquarry.ui.session.SessionDetailScreen
 import opensource.qwx.questionquarry.ui.session.SessionViewModel
 import opensource.qwx.questionquarry.ui.session.SubjectsBrowserScreen
+import opensource.qwx.questionquarry.ui.session.EditPresetsScreen
 import opensource.qwx.questionquarry.ui.session.TextEditorScreen
 import opensource.qwx.questionquarry.ui.test.TestScreen
 import opensource.qwx.questionquarry.ui.test.TestViewModel
@@ -48,19 +48,22 @@ import opensource.qwx.questionquarry.ui.settings.SettingsScreen
 import opensource.qwx.questionquarry.ui.settings.ThemeMode
 import opensource.qwx.questionquarry.ui.settings.ThemeViewModel
 import opensource.qwx.questionquarry.ui.theme.QuestionQuarryTheme
+import opensource.qwx.questionquarry.util.UpdateManager
+import opensource.qwx.questionquarry.util.UpdateInfo
 
 class MainActivity : ComponentActivity() {
     private val db by lazy {
         Room.databaseBuilder(
             applicationContext,
             QuestionQuarryDatabase::class.java,
-            "question-quarry-db"
+            "question-quarry-db",
         ).fallbackToDestructiveMigration(true).build()
     }
     
     private val viewModel by lazy { SessionViewModel(db.blockDao()) }
     private val testViewModel by lazy { TestViewModel(db.blockDao()) }
     private val themeViewModel by lazy { ThemeViewModel(applicationContext) }
+    private val updateManager by lazy { UpdateManager(applicationContext) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -68,6 +71,38 @@ class MainActivity : ComponentActivity() {
         setContent {
             val themeMode by themeViewModel.themeMode.collectAsStateWithLifecycle(initialValue = ThemeMode.SYSTEM)
             val colorSchemeId by themeViewModel.colorSchemeId.collectAsStateWithLifecycle(initialValue = ColorSchemeId.DEFAULT)
+
+            var updateInfoState by remember { mutableStateOf<UpdateInfo?>(null) }
+            val snackbarHostState = remember { SnackbarHostState() }
+
+            LaunchedEffect(Unit) {
+                updateManager.checkForUpdates()
+                    .onSuccess { info -> updateInfoState = info }
+                    .onFailure { 
+                        snackbarHostState.showSnackbar("Problem detected while checking for updates")
+                    }
+            }
+
+            if (updateInfoState != null) {
+                AlertDialog(
+                    onDismissRequest = { updateInfoState = null },
+                    title = { Text("Update Available") },
+                    text = { Text("A new version (${updateInfoState!!.version}) is available. Would you like to download and install it now?") },
+                    confirmButton = {
+                        Button(onClick = {
+                            updateManager.downloadAndInstall(updateInfoState!!)
+                            updateInfoState = null
+                        }) {
+                            Text("Download")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { updateInfoState = null }) {
+                            Text("Later")
+                        }
+                    }
+                )
+            }
 
             QuestionQuarryTheme(
                 themeMode = themeMode,
@@ -77,9 +112,10 @@ class MainActivity : ComponentActivity() {
                 val currentRoute = backStack.lastOrNull()
 
                 Scaffold(
+                    snackbarHost = { SnackbarHost(snackbarHostState) },
                     bottomBar = {
                         AnimatedVisibility(
-                            visible = currentRoute is Route.Home || currentRoute is Route.Calendar || currentRoute is Route.Settings,
+                            visible = (currentRoute is Route.Home || currentRoute is Route.Calendar || currentRoute is Route.Settings),
                             enter = slideInVertically(
                                 initialOffsetY = { it },
                                 animationSpec = spring(stiffness = Spring.StiffnessMediumLow, dampingRatio = Spring.DampingRatioNoBouncy)
@@ -152,9 +188,7 @@ class MainActivity : ComponentActivity() {
                                         filterDate = route.filterDate,
                                         onNavigateToNewSession = { title, sessionId -> 
                                             viewModel.resetDraft()
-                                            if (sessionId != null) {
-                                                viewModel.loadSessionForEditing(sessionId)
-                                            }
+                                            sessionId?.let { viewModel.loadSessionForEditing(it) }
                                             backStack.add(Route.NewSession(title, sessionId)) 
                                         },
                                         onNavigateToSettings = {
@@ -165,6 +199,9 @@ class MainActivity : ComponentActivity() {
                                         },
                                         onNavigateToSubjects = {
                                             backStack.add(Route.SubjectsBrowser)
+                                        },
+                                        onNavigateToEditPresets = {
+                                            backStack.add(Route.EditPresets)
                                         }
                                     )
                                 }
@@ -174,6 +211,16 @@ class MainActivity : ComponentActivity() {
                                         onNavigateToSessionDetail = { sessionId ->
                                             backStack.add(Route.SessionDetail(sessionId))
                                         },
+                                        onBack = {
+                                            if (backStack.size > 1) {
+                                                backStack.removeAt(backStack.size - 1)
+                                            }
+                                        }
+                                    )
+                                }
+                                entry<Route.EditPresets> {
+                                    EditPresetsScreen(
+                                        viewModel = viewModel,
                                         onBack = {
                                             if (backStack.size > 1) {
                                                 backStack.removeAt(backStack.size - 1)

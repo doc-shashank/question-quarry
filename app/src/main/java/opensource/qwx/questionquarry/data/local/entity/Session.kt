@@ -20,5 +20,5 @@ data class Session(
     val chapterNumber: String? = null,
     val chapterName: String? = null,
     val topic: String? = null,
-    val isTopicEnabled: Boolean = false
+    val isTopicEnabled: Boolean = false,
 )

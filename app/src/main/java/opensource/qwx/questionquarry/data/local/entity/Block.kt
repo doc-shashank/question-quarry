@@ -16,7 +16,7 @@ enum class BlockType {
             entity = Session::class,
             parentColumns = ["id"],
             childColumns = ["sessionId"],
-            onDelete = ForeignKey.CASCADE
+            onDelete = ForeignKey.CASCADE,
         )
     ],
     indices = [Index(value = ["sessionId"])]

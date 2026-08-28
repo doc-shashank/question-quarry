@@ -1,7 +1,11 @@
 package opensource.qwx.questionquarry.ui.home
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.rounded.*
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -35,12 +39,18 @@ fun HomeScreen(
     onNavigateToSettings: () -> Unit,
     onNavigateToSessionDetail: (Long) -> Unit,
     onNavigateToSubjects: () -> Unit,
+    onNavigateToEditPresets: () -> Unit,
+    modifier: Modifier = Modifier,
     filterDate: Long? = null,
-    modifier: Modifier = Modifier
 ) {
     val dueSessions by viewModel.getDueSessions().collectAsStateWithLifecycle(initialValue = emptyList())
-    val todaySessions by viewModel.getSessionsForToday().collectAsStateWithLifecycle(initialValue = emptyList())
+    val recentSessions by viewModel.getRecentSessions().collectAsStateWithLifecycle(initialValue = emptyList())
     val untaggedSessions by viewModel.getUntaggedSessions().collectAsStateWithLifecycle(initialValue = emptyList())
+
+    var selectedSessionIds by remember { mutableStateOf(setOf<Long>()) }
+    var isSelectionMode by remember { mutableStateOf(false) }
+
+    var showLibrarySheet by remember { mutableStateOf(false) }
 
     val filteredSessions by remember(filterDate) {
         if (filterDate != null) {
@@ -63,6 +73,47 @@ fun HomeScreen(
 
     var showNamingDialog by remember { mutableStateOf(false) }
     var newSessionName by remember { mutableStateOf("") }
+
+    if (showLibrarySheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showLibrarySheet = false }
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+                    .padding(bottom = 32.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    "Library Options",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                
+                ListItem(
+                    headlineContent = { Text("View Library") },
+                    supportingContent = { Text("Browse subjects, chapters, and topics") },
+                    leadingContent = { Icon(Icons.Rounded.Search, null) },
+                    modifier = Modifier.clickable { 
+                        showLibrarySheet = false
+                        onNavigateToSubjects() 
+                    }
+                )
+                
+                ListItem(
+                    headlineContent = { Text("Edit Presets") },
+                    supportingContent = { Text("Manage subjects, chapters, and topics") },
+                    leadingContent = { Icon(Icons.Rounded.Edit, null) },
+                    modifier = Modifier.clickable { 
+                        showLibrarySheet = false
+                        onNavigateToEditPresets() 
+                    }
+                )
+            }
+        }
+    }
 
     if (showNamingDialog) {
         AlertDialog(
@@ -116,7 +167,7 @@ fun HomeScreen(
                         newSessionName = ""
                         onNavigateToNewSession(name, null)
                     },
-                    enabled = newSessionName.isNotBlank() && newSessionName.length <= 40
+                    enabled = (newSessionName.isNotBlank()) && (newSessionName.length <= 40)
                 ) {
                     Text("Start")
                 }
@@ -142,6 +193,9 @@ fun HomeScreen(
         }
     } else "QuestionQuarry"
 
+    val displayDue = if (filterDate == null) dueSessions else emptyList()
+    val displayToday = if (filterDate == null) recentSessions else filteredSessions
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
@@ -154,8 +208,24 @@ fun HomeScreen(
                     )
                 },
                 actions = {
-                    IconButton(onClick = onNavigateToSettings) {
-                        Icon(Icons.Rounded.Settings, contentDescription = "Settings")
+                    if (isSelectionMode) {
+                        IconButton(onClick = { 
+                            viewModel.deleteSessions(selectedSessionIds.toList())
+                            isSelectionMode = false
+                            selectedSessionIds = emptySet()
+                        }) {
+                            Icon(Icons.Rounded.Delete, "Delete Selected", tint = MaterialTheme.colorScheme.error)
+                        }
+                        IconButton(onClick = { 
+                            isSelectionMode = false
+                            selectedSessionIds = emptySet()
+                        }) {
+                            Icon(Icons.Rounded.Close, "Cancel Selection")
+                        }
+                    } else {
+                        IconButton(onClick = onNavigateToSettings) {
+                            Icon(Icons.Rounded.Settings, contentDescription = "Settings")
+                        }
                     }
                 }
             )
@@ -170,9 +240,6 @@ fun HomeScreen(
             )
         }
     ) { innerPadding ->
-        val displayDue = if (filterDate == null) dueSessions else emptyList()
-        val displayToday = if (filterDate == null) todaySessions else filteredSessions
-
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -186,9 +253,9 @@ fun HomeScreen(
             
             item {
                 LibraryCard(
-                    title = "Your Subjects",
                     icon = Icons.Rounded.Book,
-                    onClick = onNavigateToSubjects
+                    onClick = onNavigateToSubjects,
+                    onLongClick = { showLibrarySheet = true }
                 )
             }
 
@@ -212,9 +279,22 @@ fun HomeScreen(
                 }
 
                 items(displayToday) { session ->
+                    val isSelected = selectedSessionIds.contains(session.id)
                     SessionItem(
                         session = session,
-                        onClick = { onNavigateToSessionDetail(session.id) }
+                        selected = isSelected,
+                        onLongClick = {
+                            isSelectionMode = true
+                            selectedSessionIds = selectedSessionIds + session.id
+                        },
+                        onClick = { 
+                            if (isSelectionMode) {
+                                if (isSelected) selectedSessionIds -= session.id else selectedSessionIds += session.id
+                                if (selectedSessionIds.isEmpty()) isSelectionMode = false
+                            } else {
+                                onNavigateToSessionDetail(session.id) 
+                            }
+                        }
                     )
                 }
             }
@@ -236,7 +316,11 @@ fun HomeScreen(
             if (displayDue.isEmpty() && displayToday.isEmpty() && untaggedSessions.isEmpty()) {
                 item {
                     Box(modifier = Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("No sessions yet. Create one!", style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            "No recent sessions", 
+                            style = MaterialTheme.typography.bodyLarge,
+                            textAlign = TextAlign.Center
+                        )
                     }
                 }
             }
@@ -248,16 +332,21 @@ fun HomeScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun LibraryCard(
-    title: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
 ) {
+    val title = "Your Subjects"
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            ),
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
@@ -379,17 +468,29 @@ private fun QuestionItem(session: Session, onClick: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun SessionItem(session: Session, onClick: () -> Unit) {
+private fun SessionItem(
+    session: Session, 
+    onClick: () -> Unit,
+    onLongClick: () -> Unit = {},
+    selected: Boolean = false
+) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            ),
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f)
+            containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f)
         ),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.2f))
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp, 
+            if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary.copy(alpha = 0.2f)
+        )
     ) {
         Row(
             modifier = Modifier.padding(20.dp),

@@ -27,19 +27,23 @@ fun DailySessionListScreen(
     date: Long,
     viewModel: SessionViewModel,
     onSessionClick: (Long) -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
 ) {
-    val calendar = Calendar.getInstance().apply { timeInMillis = date }
-    calendar.set(Calendar.HOUR_OF_DAY, 0)
-    calendar.set(Calendar.MINUTE, 0)
-    calendar.set(Calendar.SECOND, 0)
-    calendar.set(Calendar.MILLISECOND, 0)
+    val calendar = Calendar.getInstance().apply {
+        timeInMillis = date
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
     val startOfDay = calendar.timeInMillis
     
-    calendar.set(Calendar.HOUR_OF_DAY, 23)
-    calendar.set(Calendar.MINUTE, 59)
-    calendar.set(Calendar.SECOND, 59)
-    calendar.set(Calendar.MILLISECOND, 999)
+    calendar.apply {
+        set(Calendar.HOUR_OF_DAY, 23)
+        set(Calendar.MINUTE, 59)
+        set(Calendar.SECOND, 59)
+        set(Calendar.MILLISECOND, 999)
+    }
     val endOfDay = calendar.timeInMillis
 
     val sessions by viewModel.getSessionsByDateRange(startOfDay, endOfDay).collectAsState(initial = emptyList())
@@ -57,7 +61,7 @@ fun DailySessionListScreen(
                     }
                 }
             )
-        }
+        },
     ) { padding ->
         if (sessions.isEmpty()) {
             Box(

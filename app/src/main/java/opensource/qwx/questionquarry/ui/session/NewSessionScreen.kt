@@ -33,10 +33,10 @@ fun NewSessionScreen(
     onComplete: (String, List<SessionViewModel.QAPair>, String, String, String, String, Boolean) -> Unit,
     onNavigateToTextEditor: (Int, Int, Boolean) -> Unit,
     modifier: Modifier = Modifier,
-    sessionId: Long? = null
+    sessionId: Long? = null,
 ) {
     LaunchedEffect(sessionId) {
-        if (sessionId != null && viewModel.editingSessionId != sessionId) {
+        if (sessionId != null && (viewModel.editingSessionId != sessionId)) {
             viewModel.loadSessionForEditing(sessionId)
         }
     }
@@ -207,7 +207,7 @@ fun NewSessionScreen(
             AlertDialog(
                 onDismissRequest = { showFinishDialog = false },
                 title = { Text("Finish Session?") },
-                    text = { 
+                text = { 
                     Text("Would you like to add another pair, or finish the session now?")
                 },
                 confirmButton = {
@@ -405,7 +405,7 @@ fun SessionDetailsEditor(viewModel: SessionViewModel) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Rounded.Label, null, tint = MaterialTheme.colorScheme.primary)
+                Icon(Icons.Rounded.Tag, null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(12.dp))
                 Text("Enable Topic", style = MaterialTheme.typography.bodyLarge)
             }
@@ -421,7 +421,7 @@ fun SessionDetailsEditor(viewModel: SessionViewModel) {
                 onValueChange = { viewModel.draftTopic = it },
                 label = "Topic",
                 placeholder = "e.g. Specific Heat Capacity",
-                icon = Icons.Rounded.Label,
+                icon = Icons.Rounded.Tag,
                 recommendations = viewModel.getRecommendations(viewModel.draftTopic, SessionViewModel.RecommendationType.TOPIC)
             )
         }

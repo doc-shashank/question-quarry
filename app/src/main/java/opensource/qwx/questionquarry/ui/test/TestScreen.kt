@@ -34,7 +34,7 @@ import opensource.qwx.questionquarry.util.StorageManager
 fun TestScreen(
     sessionIds: List<Long>,
     viewModel: TestViewModel,
-    onBack: () -> Unit
+    onBack: () -> Unit,
 ) {
     LaunchedEffect(sessionIds) {
         viewModel.loadSessions(sessionIds)
@@ -148,7 +148,7 @@ fun TestScreen(
                             shape = MaterialTheme.shapes.extraLarge
                         ) {
                             Text(
-                                if (viewModel.currentIndex == viewModel.flashcards.size - 1) "Finish Test" else "Next Question",
+                                if (viewModel.currentIndex == (viewModel.flashcards.size - 1)) "Finish Test" else "Next Question",
                                 style = MaterialTheme.typography.titleMedium
                             )
                         }

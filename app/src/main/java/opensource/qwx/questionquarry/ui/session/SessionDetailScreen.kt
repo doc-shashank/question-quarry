@@ -27,7 +27,7 @@ fun SessionDetailScreen(
     viewModel: SessionViewModel,
     onEditSession: (String) -> Unit,
     onBack: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val sessionDetail by remember(sessionId) { viewModel.getSessionDetail(sessionId) }.collectAsStateWithLifecycle(initialValue = null)
 
@@ -102,7 +102,7 @@ fun SessionDetailScreen(
                             )
 
                             TextButton(
-                                onClick = { if (currentIndex < pairs.size - 1) currentIndex++ },
+                                onClick = { if (currentIndex < (pairs.size - 1)) currentIndex++ },
                                 enabled = currentIndex < pairs.size - 1,
                                 shape = RoundedCornerShape(12.dp)
                             ) {

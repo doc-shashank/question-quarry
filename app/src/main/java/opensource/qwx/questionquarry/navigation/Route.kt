@@ -7,7 +7,7 @@ import androidx.navigation3.runtime.NavKey
 sealed interface Route : NavKey {
     @Serializable
     data class Home(
-        val filterDate: Long? = null
+        val filterDate: Long? = null,
     ) : Route
 
     @Serializable
@@ -37,4 +37,7 @@ sealed interface Route : NavKey {
 
     @Serializable
     data object SubjectsBrowser : Route
+
+    @Serializable
+    data object EditPresets : Route
 }

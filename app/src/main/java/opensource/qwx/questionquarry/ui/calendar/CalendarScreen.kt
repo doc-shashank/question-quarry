@@ -7,7 +7,6 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -40,12 +39,12 @@ fun CalendarScreen(
 ) {
     var currentMonth by remember { mutableStateOf(Calendar.getInstance()) }
     var selectedDateForSheet by remember { mutableStateOf<Calendar?>(null) }
-    var showTestDialog by remember { mutableStateOf(false) }
+    var showTestDialog by remember { mutableStateOf(value = false) }
     var selectedDateForTest by remember { mutableStateOf<Calendar?>(null) }
     val scope = rememberCoroutineScope()
     var showSheet by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(
-        skipPartiallyExpanded = true
+        skipPartiallyExpanded = true,
     )
     
     val monthName = remember(currentMonth) {
@@ -184,7 +183,7 @@ fun CalendarScreen(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
-                                        text = if (sessionCount > 0) "$sessionCount" else "-",
+                                        text = if (sessionCount > 0) sessionCount.toString() else "-",
                                         style = MaterialTheme.typography.labelSmall.copy(
                                             fontWeight = FontWeight.ExtraBold,
                                             fontSize = 11.sp
@@ -287,13 +286,15 @@ fun CalendarScreen(
         }
     }
 
-    if (showTestDialog && selectedDateForTest != null) {
+    if (showTestDialog && (selectedDateForTest != null)) {
         val dateMillis = selectedDateForTest!!.timeInMillis
-        val cal = Calendar.getInstance().apply { timeInMillis = dateMillis }
-        cal.set(Calendar.HOUR_OF_DAY, 0)
-        cal.set(Calendar.MINUTE, 0)
-        cal.set(Calendar.SECOND, 0)
-        cal.set(Calendar.MILLISECOND, 0)
+        val cal = Calendar.getInstance().apply {
+            timeInMillis = dateMillis
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
         val normalizedDate = cal.timeInMillis
         
         val allSessionsMap by viewModel.allSessionsByDate.collectAsState()

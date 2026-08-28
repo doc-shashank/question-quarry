@@ -2,4 +2,5 @@
 <paths>
     <cache-path name="cached_images" path="images/" />
     <files-path name="stored_images" path="images/" />
+    <external-cache-path name="updates" path="updates/" />
 </paths>

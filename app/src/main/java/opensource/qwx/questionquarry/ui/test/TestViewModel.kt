@@ -1,8 +1,6 @@
 package opensource.qwx.questionquarry.ui.test
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
@@ -15,7 +13,7 @@ data class TestFlashcard(
     val sessionId: Long,
     val pairIndex: Int,
     val questionContent: String,
-    val answerContent: String
+    val answerContent: String,
 )
 
 class TestViewModel(private val blockDao: BlockDao) : ViewModel() {
@@ -23,13 +21,13 @@ class TestViewModel(private val blockDao: BlockDao) : ViewModel() {
     var flashcards by mutableStateOf<List<TestFlashcard>>(emptyList())
         private set
 
-    var currentIndex by mutableStateOf(0)
+    var currentIndex by mutableIntStateOf(value = 0)
         private set
 
-    var isFlipped by mutableStateOf(false)
+    var isFlipped by mutableStateOf(value = false)
         private set
 
-    var secondsElapsed by mutableStateOf(0L)
+    var secondsElapsed by mutableLongStateOf(0L)
         private set
 
     var isTestComplete by mutableStateOf(false)
@@ -94,7 +92,7 @@ class TestViewModel(private val blockDao: BlockDao) : ViewModel() {
         secondsElapsed = 0
         stopwatchJob = viewModelScope.launch {
             while (true) {
-                delay(1000)
+                delay(1000L)
                 secondsElapsed++
             }
         }
@@ -105,7 +103,7 @@ class TestViewModel(private val blockDao: BlockDao) : ViewModel() {
     }
 
     fun next() {
-        if (currentIndex < flashcards.size - 1) {
+        if (currentIndex < (flashcards.size - 1)) {
             currentIndex++
             isFlipped = false
         } else {
@@ -121,7 +119,6 @@ class TestViewModel(private val blockDao: BlockDao) : ViewModel() {
     }
 
     override fun onCleared() {
-        super.onCleared()
         stopwatchJob?.cancel()
     }
 }

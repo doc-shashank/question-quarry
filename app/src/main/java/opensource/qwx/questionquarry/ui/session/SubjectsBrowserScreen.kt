@@ -1,6 +1,5 @@
 package opensource.qwx.questionquarry.ui.session
 
-import androidx.compose.animation.*
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -19,7 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import opensource.qwx.questionquarry.data.local.entity.Session
 
-sealed class BrowserLevel {
+private sealed class BrowserLevel {
     data object Subjects : BrowserLevel()
     data class Chapters(val subject: String) : BrowserLevel()
     data class Topics(val subject: String, val chapter: String?) : BrowserLevel()
@@ -30,11 +29,16 @@ sealed class BrowserLevel {
 fun SubjectsBrowserScreen(
     viewModel: SessionViewModel,
     onNavigateToSessionDetail: (Long) -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
 ) {
     var currentLevel by remember { mutableStateOf<BrowserLevel>(BrowserLevel.Subjects) }
     
     val subjects by viewModel.subjects.collectAsStateWithLifecycle()
+    val presetSubjects by viewModel.presetSubjects.collectAsStateWithLifecycle()
+    val combinedSubjects = remember(subjects, presetSubjects) {
+        (subjects + presetSubjects.map { it.name }).asSequence().distinct().sorted().toList()
+    }
+
     val chapters by viewModel.chapterNames.collectAsStateWithLifecycle()
     
     // For Topics level, we need to filter sessions
@@ -76,7 +80,7 @@ fun SubjectsBrowserScreen(
         Column(modifier = Modifier.padding(padding)) {
             when (val level = currentLevel) {
                 BrowserLevel.Subjects -> {
-                    SubjectsList(subjects) { currentLevel = BrowserLevel.Chapters(it) }
+                    SubjectsList(combinedSubjects) { currentLevel = BrowserLevel.Chapters(it) }
                 }
                 is BrowserLevel.Chapters -> {
                     // In a real app we'd filter chapters by subject. 

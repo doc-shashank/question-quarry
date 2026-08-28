@@ -2,7 +2,6 @@ package opensource.qwx.questionquarry.ui.session
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.CircleShape
@@ -47,11 +46,11 @@ fun TextEditorScreen(
     blockIndex: Int,
     isQuestion: Boolean,
     viewModel: SessionViewModel,
-    onBack: () -> Unit
+    onBack: () -> Unit,
 ) {
     val pair = viewModel.draftPairs.getOrNull(pairIndex) ?: return
-    val allBlocks = if (isQuestion) pair.questionBlocks else pair.answerBlocks
-    val block = allBlocks.getOrNull(blockIndex) as? CanvasBlock.Text ?: return
+    val allBlocks = if (isQuestion) (pair.questionBlocks) else (pair.answerBlocks)
+    val block = (allBlocks.getOrNull(blockIndex) as? CanvasBlock.Text) ?: return
     
     val richTextState = rememberRichTextState()
     val clipboardManager = LocalClipboardManager.current
@@ -75,14 +74,15 @@ fun TextEditorScreen(
                 }
             },
             onPasteRequested = {
-                val text = clipboardManager.getText()?.text
-                if (text != null) {
-                    richTextState.replaceSelectedText(text)
+                clipboardManager.getText()?.text?.let {
+                    richTextState.replaceSelectedText(it)
                 }
             },
             onBoldRequested = { richTextState.toggleSpanStyle(SpanStyle(fontWeight = FontWeight.Bold)) },
             onItalicRequested = { richTextState.toggleSpanStyle(SpanStyle(fontStyle = FontStyle.Italic)) },
-            onUnderlineRequested = { richTextState.toggleSpanStyle(SpanStyle(textDecoration = TextDecoration.Underline)) }
+            onUnderlineRequested = { 
+                richTextState.toggleSpanStyle(SpanStyle(textDecoration = TextDecoration.Underline)) 
+            }
         )
     }
     
@@ -152,7 +152,27 @@ fun TextEditorScreen(
     }
 
     if (showDeleteDialog) {
-        // ... (existing code)
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Delete Block?") },
+            text = { Text("Are you sure you want to delete this text block?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteTextBlock(pairIndex, block.id, isQuestion)
+                        onBack()
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     CompositionLocalProvider(LocalTextToolbar provides customTextToolbar) {

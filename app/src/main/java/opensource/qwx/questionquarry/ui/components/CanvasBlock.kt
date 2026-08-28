@@ -19,12 +19,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
+import androidx.core.net.toUri
 import coil.compose.AsyncImage
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
@@ -44,12 +44,12 @@ sealed class CanvasBlock {
     
     data class Text(
         val content: String = "",
-        override val id: String = UUID.randomUUID().toString()
+        override val id: String = UUID.randomUUID().toString(),
     ) : CanvasBlock()
     
     data class Image(
         val imagePath: String? = null,
-        override val id: String = UUID.randomUUID().toString()
+        override val id: String = UUID.randomUUID().toString(),
     ) : CanvasBlock()
 }
 
@@ -192,7 +192,7 @@ fun ImageBlockContent(
     val scope = rememberCoroutineScope()
     
     val cameraPermissionState = rememberPermissionState(android.Manifest.permission.CAMERA)
-    var isChangingImage by rememberSaveable { mutableStateOf(false) }
+    var isChangingImage by rememberSaveable { mutableStateOf(value = false) }
     var shouldLaunchCamera by rememberSaveable { mutableStateOf(false) }
 
     val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -214,7 +214,7 @@ fun ImageBlockContent(
         Log.d(TAG, "Camera TakePicture result: $success, URI: $tempUriString")
         if (success) {
             tempUriString?.let { uriString ->
-                val uri = Uri.parse(uriString)
+                val uri = uriString.toUri()
                 scope.launch(Dispatchers.IO) {
                     try {
                         val path = storageManager.saveImage(uri)
@@ -256,7 +256,7 @@ fun ImageBlockContent(
         }
     }
 
-    if (imagePath != null && !isChangingImage) {
+    if ((imagePath != null) && (!isChangingImage)) {
         Box(modifier = Modifier.fillMaxWidth()) {
             val file = storageManager.getFile(imagePath)
             AsyncImage(

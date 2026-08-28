@@ -7,12 +7,11 @@ import android.util.Log
 import androidx.core.content.FileProvider
 import java.io.File
 import java.io.FileOutputStream
-import java.io.IOException
 import java.util.UUID
 
-class StorageManager(private val context: Context) {
+private const val TAG = "StorageManager"
 
-    private val TAG = "StorageManager"
+class StorageManager(private val context: Context) {
 
     /**
      * Returns the FileProvider authority for the app.
