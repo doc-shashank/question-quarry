@@ -45,6 +45,7 @@ datastorePreferences = "1.1.1"
 material = "1.12.0"
 multiplatformMarkdownRenderer = "0.27.0"
 richeditorCompose = "1.0.0-rc10"
+coreSplashscreen = "1.0.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -98,6 +99,7 @@ androidx-datastore-preferences = { group = "androidx.datastore", name = "datasto
 material = { group = "com.google.android.material", name = "material", version.ref = "material" }
 multiplatform-markdown-renderer-m3 = { group = "com.mikepenz", name = "multiplatform-markdown-renderer-m3", version.ref = "multiplatformMarkdownRenderer" }
 richeditor-compose = { group = "com.mohamedrejeb.richeditor", name = "richeditor-compose", version.ref = "richeditorCompose" }
+androidx-core-splashscreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "coreSplashscreen" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

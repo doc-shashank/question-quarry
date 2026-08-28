@@ -12,6 +12,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.Quiz
 import androidx.compose.material3.*
@@ -58,7 +60,14 @@ fun CalendarScreen(
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Calendar Browser") },
+                title = { 
+                    Text(
+                        "Calendar Browser",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    ) 
+                },
+                windowInsets = WindowInsets(0, 0, 0, 0),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
@@ -84,7 +93,7 @@ fun CalendarScreen(
                     newMonth.add(Calendar.MONTH, -1)
                     currentMonth = newMonth
                 }) {
-                    Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Previous Month")
+                    Icon(Icons.AutoMirrored.Rounded.KeyboardArrowLeft, contentDescription = "Previous Month")
                 }
                 Text(
                     text = monthName,
@@ -96,7 +105,7 @@ fun CalendarScreen(
                     newMonth.add(Calendar.MONTH, 1)
                     currentMonth = newMonth
                 }) {
-                    Icon(Icons.AutoMirrored.Rounded.ArrowForward, contentDescription = "Next Month")
+                    Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = "Next Month")
                 }
             }
 

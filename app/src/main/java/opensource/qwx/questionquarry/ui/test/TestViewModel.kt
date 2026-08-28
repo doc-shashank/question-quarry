@@ -50,23 +50,25 @@ class TestViewModel(private val blockDao: BlockDao) : ViewModel() {
             val cards = grouped.values.map { blocks ->
                 val question = blocks.filter { it.isQuestion }
                     .sortedBy { it.orderIndex }
-                    .joinToString("\n\n") { block ->
-                        if (block.type == opensource.qwx.questionquarry.data.local.entity.BlockType.IMAGE) {
+                    .joinToString("\n") { block ->
+                        val content = if (block.type == opensource.qwx.questionquarry.data.local.entity.BlockType.IMAGE) {
                             "![image](${block.content})"
                         } else {
-                            block.content
+                            block.content.trim()
                         }
-                    }
+                        content
+                    }.trim()
                 
                 val answer = blocks.filter { !it.isQuestion }
                     .sortedBy { it.orderIndex }
-                    .joinToString("\n\n") { block ->
-                        if (block.type == opensource.qwx.questionquarry.data.local.entity.BlockType.IMAGE) {
+                    .joinToString("\n") { block ->
+                        val content = if (block.type == opensource.qwx.questionquarry.data.local.entity.BlockType.IMAGE) {
                             "![image](${block.content})"
                         } else {
-                            block.content
+                            block.content.trim()
                         }
-                    }
+                        content
+                    }.trim()
 
                 TestFlashcard(
                     sessionId = blocks.first().sessionId,

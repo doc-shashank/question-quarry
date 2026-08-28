@@ -1,7 +1,9 @@
 package opensource.qwx.questionquarry
 
+import android.util.Log
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedVisibility
@@ -10,8 +12,12 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -40,6 +46,7 @@ import opensource.qwx.questionquarry.ui.session.SessionDetailScreen
 import opensource.qwx.questionquarry.ui.session.SessionViewModel
 import opensource.qwx.questionquarry.ui.session.SubjectsBrowserScreen
 import opensource.qwx.questionquarry.ui.session.EditPresetsScreen
+import opensource.qwx.questionquarry.ui.session.UpdateDetailsScreen
 import opensource.qwx.questionquarry.ui.session.TextEditorScreen
 import opensource.qwx.questionquarry.ui.test.TestScreen
 import opensource.qwx.questionquarry.ui.test.TestViewModel
@@ -66,6 +73,7 @@ class MainActivity : ComponentActivity() {
     private val updateManager by lazy { UpdateManager(applicationContext) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
@@ -83,33 +91,40 @@ class MainActivity : ComponentActivity() {
                     }
             }
 
-            if (updateInfoState != null) {
-                AlertDialog(
-                    onDismissRequest = { updateInfoState = null },
-                    title = { Text("Update Available") },
-                    text = { Text("A new version (${updateInfoState!!.version}) is available. Would you like to download and install it now?") },
-                    confirmButton = {
-                        Button(onClick = {
-                            updateManager.downloadAndInstall(updateInfoState!!)
-                            updateInfoState = null
-                        }) {
-                            Text("Download")
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { updateInfoState = null }) {
-                            Text("Later")
-                        }
-                    }
-                )
-            }
-
             QuestionQuarryTheme(
                 themeMode = themeMode,
                 colorSchemeId = colorSchemeId
             ) {
                 val backStack = rememberNavBackStack(Route.Home())
                 val currentRoute = backStack.lastOrNull()
+
+                if (updateInfoState != null) {
+                    AlertDialog(
+                        onDismissRequest = { updateInfoState = null },
+                        title = { Text("Update Available") },
+                        text = { Text("A new version (${updateInfoState!!.version}) is available.") },
+                        confirmButton = {
+                            Button(onClick = {
+                                backStack.add(Route.UpdateDetails(
+                                    version = updateInfoState!!.version,
+                                    downloadUrl = updateInfoState!!.downloadUrl,
+                                    releaseNotes = updateInfoState!!.releaseNotes
+                                ))
+                                updateInfoState = null
+                            }) {
+                                Text("View Details")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = {
+                                updateManager.ignoreVersion(updateInfoState!!.version)
+                                updateInfoState = null
+                            }) {
+                                Text("Ignore")
+                            }
+                        }
+                    )
+                }
 
                 Scaffold(
                     snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -152,16 +167,6 @@ class MainActivity : ComponentActivity() {
                                     icon = { Icon(Icons.Rounded.CalendarMonth, contentDescription = "Calendar") },
                                     label = { Text("Calendar") }
                                 )
-                                NavigationBarItem(
-                                    selected = currentRoute is Route.Settings,
-                                    onClick = {
-                                        if (currentRoute !is Route.Settings) {
-                                            backStack.add(Route.Settings)
-                                        }
-                                    },
-                                    icon = { Icon(Icons.Rounded.Settings, contentDescription = "Settings") },
-                                    label = { Text("Settings") }
-                                )
                             }
                         }
                     }
@@ -181,6 +186,14 @@ class MainActivity : ComponentActivity() {
                                     backStack.removeAt(backStack.size - 1)
                                 }
                             },
+                            transitionSpec = {
+                                fadeIn(animationSpec = tween(200)) togetherWith fadeOut(animationSpec = tween(200))
+                            },
+                            popTransitionSpec = {
+                                fadeIn(animationSpec = tween(200)) togetherWith fadeOut(animationSpec = tween(200))
+                            },
+
+
                             entryProvider = entryProvider {
                                 entry<Route.Home> { route ->
                                     HomeScreen(
@@ -231,6 +244,7 @@ class MainActivity : ComponentActivity() {
                                 entry<Route.Settings> {
                                     SettingsScreen(
                                         viewModel = themeViewModel,
+                                        updateManager = updateManager,
                                         onBack = {
                                             if (backStack.size > 1) {
                                                 backStack.removeAt(backStack.size - 1)
@@ -323,6 +337,25 @@ class MainActivity : ComponentActivity() {
                                     TestScreen(
                                         sessionIds = route.sessionIds,
                                         viewModel = testViewModel,
+                                        onBack = {
+                                            if (backStack.size > 1) {
+                                                backStack.removeAt(backStack.size - 1)
+                                            }
+                                        }
+                                    )
+                                }
+                                entry<Route.UpdateDetails> { route ->
+                                    UpdateDetailsScreen(
+                                        version = route.version,
+                                        releaseNotes = route.releaseNotes,
+                                        onDownload = {
+                                            updateManager.downloadAndInstall(UpdateInfo(route.version, route.downloadUrl, route.releaseNotes))
+                                            backStack.removeAt(backStack.size - 1)
+                                        },
+                                        onIgnore = {
+                                            updateManager.ignoreVersion(route.version)
+                                            backStack.removeAt(backStack.size - 1)
+                                        },
                                         onBack = {
                                             if (backStack.size > 1) {
                                                 backStack.removeAt(backStack.size - 1)

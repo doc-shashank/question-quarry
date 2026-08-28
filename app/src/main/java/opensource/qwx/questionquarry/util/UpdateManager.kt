@@ -27,6 +27,8 @@ data class UpdateInfo(
 
 class UpdateManager(private val context: Context) {
 
+    private val prefs = context.getSharedPreferences("update_prefs", Context.MODE_PRIVATE)
+    
     private val githubOwner = "doc-shashank"
     private val githubRepo = "question-quarry"
     
@@ -37,7 +39,7 @@ class UpdateManager(private val context: Context) {
         .writeTimeout(20, TimeUnit.SECONDS)
         .build()
 
-    suspend fun checkForUpdates(): Result<UpdateInfo?> = withContext(Dispatchers.IO) {
+    suspend fun checkForUpdates(force: Boolean = false): Result<UpdateInfo?> = withContext(Dispatchers.IO) {
         try {
             val request = Request.Builder()
                 .url(latestReleaseUrl)
@@ -48,8 +50,14 @@ class UpdateManager(private val context: Context) {
                 if (!response.isSuccessful) return@withContext Result.failure(Exception("HTTP ${response.code}"))
 
                 val json = JSONObject(response.body?.string() ?: "")
-                val latestVersion = json.getString("tag_name").removePrefix("v")
+                val latestVersionTag = json.getString("tag_name")
+                val latestVersion = latestVersionTag.removePrefix("v")
                 
+                if (!force) {
+                    val ignoredVersion = prefs.getString("ignored_version", null)
+                    if (latestVersion == ignoredVersion) return@withContext Result.success(null)
+                }
+
                 if (isNewerVersion(latestVersion, BuildConfig.VERSION_NAME)) {
                     val assets = json.getJSONArray("assets")
                     var downloadUrl: String? = null
@@ -94,6 +102,10 @@ class UpdateManager(private val context: Context) {
         return false
     }
 
+    fun ignoreVersion(version: String) {
+        prefs.edit().putString("ignored_version", version).apply()
+    }
+
     fun downloadAndInstall(updateInfo: UpdateInfo) {
         val destination = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "update.apk")
         if (destination.exists()) destination.delete()
@@ -102,8 +114,6 @@ class UpdateManager(private val context: Context) {
             .setTitle("Downloading QuestionQuarry Update")
             .setDescription("Version ${updateInfo.version}")
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-            .setDestinationUri(updateInfo.downloadUrl.toUri()) // Fixed: Destination should be Local File Uri or remove setDestinationUri if handled by DM
-            // Reverting setDestinationUri to a file based one as per earlier implementation or let DM decide
             .setDestinationUri(Uri.fromFile(destination))
             .setMimeType("application/vnd.android.package-archive")
 

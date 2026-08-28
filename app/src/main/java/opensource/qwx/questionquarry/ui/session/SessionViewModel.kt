@@ -5,10 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import opensource.qwx.questionquarry.data.local.dao.BlockDao
 import opensource.qwx.questionquarry.data.local.entity.Block
@@ -20,7 +17,12 @@ import opensource.qwx.questionquarry.data.local.entity.SessionStatus
 import opensource.qwx.questionquarry.data.cache.SessionCache
 import opensource.qwx.questionquarry.ui.components.CanvasBlock
 import java.util.*
-import kotlinx.coroutines.flow.*
+
+private const val DUMMY_SESSION_TITLE = "DummySession0"
+
+enum class RecommendationType {
+    SUBJECT, CHAPTER_NUMBER, CHAPTER_NAME, TOPIC
+}
 
 class SessionViewModel(private val blockDao: BlockDao) : ViewModel() {
 
@@ -79,19 +81,29 @@ class SessionViewModel(private val blockDao: BlockDao) : ViewModel() {
     val presetSubjects = blockDao.getAllSubjects()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val presetChapterNames = blockDao.getPresetChapterNames()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val presetTopics = blockDao.getPresetTopics()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     fun getRecommendations(query: String, type: RecommendationType): List<String> {
         if (query.isBlank()) return emptyList()
-        val list = when (type) {
-            RecommendationType.SUBJECT -> (subjects.value + presetSubjects.value.map { it.name }).distinct()
-            RecommendationType.CHAPTER_NUMBER -> chapterNumbers.value
-            RecommendationType.CHAPTER_NAME -> chapterNames.value
-            RecommendationType.TOPIC -> topics.value
+        val list: List<String> = when (type) {
+            RecommendationType.SUBJECT -> {
+                (subjects.value + presetSubjects.value.map { it.name }).distinct()
+            }
+            RecommendationType.CHAPTER_NUMBER -> {
+                chapterNumbers.value
+            }
+            RecommendationType.CHAPTER_NAME -> {
+                (chapterNames.value + presetChapterNames.value).distinct()
+            }
+            RecommendationType.TOPIC -> {
+                (topics.value + presetTopics.value).distinct()
+            }
         }
-        return list.asSequence().filter { it.contains(query, ignoreCase = true) }.take(5).toList()
-    }
-
-    enum class RecommendationType {
-        SUBJECT, CHAPTER_NUMBER, CHAPTER_NAME, TOPIC
+        return list.asSequence().filter { it.contains(query, ignoreCase = true) }.take(3).toList()
     }
 
     fun getSessionCountOnDate(dateMillis: Long): Int {
@@ -229,8 +241,41 @@ class SessionViewModel(private val blockDao: BlockDao) : ViewModel() {
         viewModelScope.launch {
             sessionIds.forEach { id ->
                 val session = blockDao.getSessionByIdSync(id)
+                if (session.title != DUMMY_SESSION_TITLE) {
+                    blockDao.deleteSession(session)
+                    sessionCache.remove(id)
+                }
+            }
+        }
+    }
+
+    fun deleteSessionWithOptions(sessionId: Long, deleteAll: Boolean) {
+        viewModelScope.launch {
+            if (deleteAll) {
+                val session = blockDao.getSessionByIdSync(sessionId)
                 blockDao.deleteSession(session)
-                sessionCache.remove(id)
+                sessionCache.remove(sessionId)
+            } else {
+                // Dissociate and Delete
+                var dummy = blockDao.getSessionByTitleSync(DUMMY_SESSION_TITLE)
+                if (dummy == null) {
+                    val dummyId = blockDao.insertSession(
+                        Session(
+                            title = DUMMY_SESSION_TITLE,
+                            status = SessionStatus.DONE,
+                            date = 0 // permanent/hidden
+                        )
+                    )
+                    dummy = blockDao.getSessionByIdSync(dummyId)
+                }
+                
+                // Reparent blocks to dummy
+                blockDao.reparentBlocks(sessionId, dummy.id)
+                
+                // Delete original session
+                val session = blockDao.getSessionByIdSync(sessionId)
+                blockDao.deleteSession(session)
+                sessionCache.remove(sessionId)
             }
         }
     }
@@ -244,12 +289,19 @@ class SessionViewModel(private val blockDao: BlockDao) : ViewModel() {
     fun getSessionsBySubjectAndChapter(subject: String, chapter: String?): Flow<List<Session>> = 
         blockDao.getSessionsBySubjectAndChapter(subject, chapter)
 
+    fun getUnifiedChapters(subjectName: String): Flow<List<String>> = combine(
+        blockDao.getChaptersBySubjectName(subjectName),
+        blockDao.getSessionChaptersBySubjectName(subjectName)
+    ) { presets, sessions ->
+        (presets + sessions).distinct().sorted()
+    }
+
     fun getChaptersForSubject(subjectId: Long): Flow<List<Preset>> = blockDao.getChaptersForSubject(subjectId)
     fun getTopicsForChapter(chapterId: Long): Flow<List<Preset>> = blockDao.getTopicsForChapter(chapterId)
 
-    fun createPreset(name: String, type: PresetType, parentId: Long? = null) {
+    fun createPreset(name: String, type: PresetType, parentId: Long? = null, subject: String? = null, chapter: String? = null) {
         viewModelScope.launch {
-            blockDao.insertPreset(Preset(name = name, type = type, parentId = parentId))
+            blockDao.insertPreset(Preset(name = name, type = type, parentId = parentId, subject = subject, chapter = chapter))
         }
     }
 
@@ -365,6 +417,45 @@ class SessionViewModel(private val blockDao: BlockDao) : ViewModel() {
             // Update cache after save
             val savedSession = blockDao.getSessionByIdSync(sessionId)
             sessionCache.put(savedSession)
+            
+            // Automatic Tag Creation
+            if (!subject.isNullOrBlank()) {
+                val existingSubjects = presetSubjects.value.map { it.name }
+                if (!existingSubjects.contains(subject)) {
+                    val subjectId = blockDao.insertPreset(Preset(name = subject, type = PresetType.SUBJECT))
+                    
+                    if (!chapterName.isNullOrBlank()) {
+                        val chapterId = blockDao.insertPreset(Preset(name = chapterName, type = PresetType.CHAPTER, parentId = subjectId, subject = subject))
+                        
+                        if (isTopicEnabled && !topic.isNullOrBlank()) {
+                            blockDao.insertPreset(Preset(name = topic, type = PresetType.TOPIC, parentId = chapterId, subject = subject, chapter = chapterName))
+                        }
+                    }
+                } else {
+                    // Subject exists, check chapter
+                    val subjectPreset = presetSubjects.value.find { it.name == subject }
+                    if (subjectPreset != null && !chapterName.isNullOrBlank()) {
+                        val chaptersInSubject = blockDao.getChaptersForSubject(subjectPreset.id).first()
+                        val existingChapters = chaptersInSubject.map { it.name }
+                        if (!existingChapters.contains(chapterName)) {
+                            val chapterId = blockDao.insertPreset(Preset(name = chapterName, type = PresetType.CHAPTER, parentId = subjectPreset.id, subject = subject))
+                            
+                            if (isTopicEnabled && !topic.isNullOrBlank()) {
+                                blockDao.insertPreset(Preset(name = topic, type = PresetType.TOPIC, parentId = chapterId, subject = subject, chapter = chapterName))
+                            }
+                        } else {
+                            // Chapter exists, check topic
+                            val chapterPreset = chaptersInSubject.find { it.name == chapterName }
+                            if (chapterPreset != null && isTopicEnabled && !topic.isNullOrBlank()) {
+                                val topicsInChapter = blockDao.getTopicsForChapter(chapterPreset.id).first()
+                                if (!topicsInChapter.map { it.name }.contains(topic)) {
+                                    blockDao.insertPreset(Preset(name = topic, type = PresetType.TOPIC, parentId = chapterPreset.id, subject = subject, chapter = chapterName))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             
             onComplete()
         }

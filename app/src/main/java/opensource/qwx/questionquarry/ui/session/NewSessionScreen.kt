@@ -2,7 +2,9 @@ package opensource.qwx.questionquarry.ui.session
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -13,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -122,7 +125,7 @@ fun NewSessionScreen(
                                 ) {
                                     Text(
                                         "Pair ${currentPairIndex + 1}",
-                                        style = MaterialTheme.typography.labelMedium,
+                                        style = MaterialTheme.typography.labelLarge,
                                         fontWeight = FontWeight.SemiBold,
                                         color = MaterialTheme.colorScheme.onSecondaryContainer
                                     )
@@ -158,6 +161,7 @@ fun NewSessionScreen(
                         }
                     }
                 },
+                windowInsets = WindowInsets(0, 0, 0, 0),
                 navigationIcon = {
                     IconButton(
                         onClick = {
@@ -349,7 +353,7 @@ fun SessionDetailsEditor(viewModel: SessionViewModel) {
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         
-        if (viewModel.draftSubject.isBlank()) {
+        if (viewModel.editingSessionId != null && viewModel.draftSubject.isBlank()) {
             Surface(
                 color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
                 shape = RoundedCornerShape(12.dp),
@@ -372,32 +376,102 @@ fun SessionDetailsEditor(viewModel: SessionViewModel) {
 
         Spacer(Modifier.height(4.dp))
 
+        var isSubjectFocused by remember { mutableStateOf(false) }
         RecommendationTextField(
             value = viewModel.draftSubject,
             onValueChange = { viewModel.draftSubject = it },
             label = "Subject",
             placeholder = "e.g. Physics, History, Math",
             icon = Icons.Rounded.Book,
-            recommendations = viewModel.getRecommendations(viewModel.draftSubject, SessionViewModel.RecommendationType.SUBJECT)
+            recommendations = if (isSubjectFocused) viewModel.getRecommendations(viewModel.draftSubject, RecommendationType.SUBJECT) else emptyList(),
+            modifier = Modifier.onFocusChanged { isSubjectFocused = it.isFocused }
         )
 
+        val isSubjectFilled = viewModel.draftSubject.isNotBlank()
+
+        if (isSubjectFocused && !isSubjectFilled) {
+            Surface(
+                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        Icons.Rounded.Info, 
+                        null, 
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .size(24.dp)
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f), CircleShape)
+                            .padding(4.dp)
+                    )
+                    Text(
+                        "Fill in the Subject field to unlock Chapter and Topic tagging.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                }
+            }
+        }
+
+        var isChNoFocused by remember { mutableStateOf(false) }
         RecommendationTextField(
             value = viewModel.draftChapterNumber,
             onValueChange = { viewModel.draftChapterNumber = it },
             label = "Chapter Number",
             placeholder = "e.g. 1, 2a, etc.",
             icon = Icons.Rounded.Numbers,
-            recommendations = viewModel.getRecommendations(viewModel.draftChapterNumber, SessionViewModel.RecommendationType.CHAPTER_NUMBER)
+            enabled = isSubjectFilled,
+            recommendations = if (isChNoFocused) viewModel.getRecommendations(viewModel.draftChapterNumber, RecommendationType.CHAPTER_NUMBER) else emptyList(),
+            modifier = Modifier.onFocusChanged { isChNoFocused = it.isFocused }
         )
 
+        var isChNameFocused by remember { mutableStateOf(false) }
         RecommendationTextField(
             value = viewModel.draftChapterName,
             onValueChange = { viewModel.draftChapterName = it },
             label = "Chapter Name",
             placeholder = "e.g. Thermodynamics",
             icon = Icons.Rounded.Topic,
-            recommendations = viewModel.getRecommendations(viewModel.draftChapterName, SessionViewModel.RecommendationType.CHAPTER_NAME)
+            enabled = isSubjectFilled,
+            recommendations = if (isChNameFocused) viewModel.getRecommendations(viewModel.draftChapterName, RecommendationType.CHAPTER_NAME) else emptyList(),
+            modifier = Modifier.onFocusChanged { isChNameFocused = it.isFocused }
         )
+
+        // Preset Creation Notification
+        if (isSubjectFilled) {
+            Surface(
+                color = MaterialTheme.colorScheme.tertiaryContainer,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        Icons.Rounded.AutoAwesome, 
+                        null, 
+                        tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                        modifier = Modifier
+                            .size(24.dp)
+                            .background(MaterialTheme.colorScheme.tertiary, CircleShape)
+                            .padding(4.dp)
+                    )
+                    Text(
+                        "Entering a new Subject/Chapter/Topic combination will automatically create a new preset for future use.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+        }
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -416,13 +490,16 @@ fun SessionDetailsEditor(viewModel: SessionViewModel) {
         }
 
         if (viewModel.isTopicEnabled) {
+            var isTopicFocused by remember { mutableStateOf(false) }
             RecommendationTextField(
                 value = viewModel.draftTopic,
                 onValueChange = { viewModel.draftTopic = it },
                 label = "Topic",
                 placeholder = "e.g. Specific Heat Capacity",
                 icon = Icons.Rounded.Tag,
-                recommendations = viewModel.getRecommendations(viewModel.draftTopic, SessionViewModel.RecommendationType.TOPIC)
+                enabled = isSubjectFilled,
+                recommendations = if (isTopicFocused) viewModel.getRecommendations(viewModel.draftTopic, RecommendationType.TOPIC) else emptyList(),
+                modifier = Modifier.onFocusChanged { isTopicFocused = it.isFocused }
             )
         }
     }
@@ -430,14 +507,19 @@ fun SessionDetailsEditor(viewModel: SessionViewModel) {
 
 @Composable
 fun RecommendationTextField(
+    modifier: Modifier = Modifier,
     value: String,
     onValueChange: (String) -> Unit,
     label: String,
     placeholder: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
-    recommendations: List<String>
+    recommendations: List<String>,
+    enabled: Boolean = true,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,
@@ -446,7 +528,8 @@ fun RecommendationTextField(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
             leadingIcon = { Icon(icon, null) },
-            singleLine = true
+            singleLine = true,
+            enabled = enabled
         )
         
         if (recommendations.isNotEmpty()) {

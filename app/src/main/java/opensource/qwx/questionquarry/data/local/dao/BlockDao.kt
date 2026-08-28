@@ -22,6 +22,9 @@ interface BlockDao {
     @Query("SELECT * FROM sessions WHERE id = :sessionId")
     suspend fun getSessionByIdSync(sessionId: Long): Session
 
+    @Query("SELECT * FROM sessions WHERE title = :title LIMIT 1")
+    suspend fun getSessionByTitleSync(title: String): Session?
+
     @Query("SELECT * FROM blocks WHERE sessionId = :sessionId ORDER BY pairIndex ASC, isQuestion DESC, orderIndex ASC")
     suspend fun getAllBlocksForSessionSync(sessionId: Long): List<Block>
 
@@ -48,6 +51,12 @@ interface BlockDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertBlocks(blocks: List<Block>)
+
+    @Update
+    suspend fun updateBlocks(blocks: List<Block>)
+
+    @Query("UPDATE blocks SET sessionId = :newSessionId WHERE sessionId = :oldSessionId")
+    suspend fun reparentBlocks(oldSessionId: Long, newSessionId: Long)
 
     @Update
     suspend fun updateBlock(block: Block)
@@ -93,4 +102,16 @@ interface BlockDao {
 
     @Query("SELECT * FROM presets WHERE type = 'TOPIC' AND parentId = :chapterId")
     fun getTopicsForChapter(chapterId: Long): Flow<List<Preset>>
+
+    @Query("SELECT DISTINCT name FROM presets WHERE type = 'CHAPTER'")
+    fun getPresetChapterNames(): Flow<List<String>>
+
+    @Query("SELECT DISTINCT name FROM presets WHERE type = 'TOPIC'")
+    fun getPresetTopics(): Flow<List<String>>
+
+    @Query("SELECT DISTINCT name FROM presets WHERE type = 'CHAPTER' AND subject = :subjectName")
+    fun getChaptersBySubjectName(subjectName: String): Flow<List<String>>
+
+    @Query("SELECT DISTINCT chapterName FROM sessions WHERE subject = :subjectName AND chapterName IS NOT NULL AND chapterName != ''")
+    fun getSessionChaptersBySubjectName(subjectName: String): Flow<List<String>>
 }

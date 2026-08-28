@@ -40,4 +40,11 @@ sealed interface Route : NavKey {
 
     @Serializable
     data object EditPresets : Route
+
+    @Serializable
+    data class UpdateDetails(
+        val version: String,
+        val downloadUrl: String,
+        val releaseNotes: String
+    ) : Route
 }

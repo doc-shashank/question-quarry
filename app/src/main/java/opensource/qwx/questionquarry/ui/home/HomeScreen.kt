@@ -6,6 +6,11 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -23,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import opensource.qwx.questionquarry.data.local.entity.Session
 import opensource.qwx.questionquarry.ui.session.SessionViewModel
@@ -51,6 +57,11 @@ fun HomeScreen(
     var isSelectionMode by remember { mutableStateOf(false) }
 
     var showLibrarySheet by remember { mutableStateOf(false) }
+    var sessionToDelete by remember { mutableStateOf<Long?>(null) }
+    var expandedSessionId by remember { mutableStateOf<Long?>(null) }
+
+    val haptic = LocalHapticFeedback.current
+    val listState = rememberLazyListState()
 
     val filteredSessions by remember(filterDate) {
         if (filterDate != null) {
@@ -74,6 +85,45 @@ fun HomeScreen(
     var showNamingDialog by remember { mutableStateOf(false) }
     var newSessionName by remember { mutableStateOf("") }
 
+    if (sessionToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { sessionToDelete = null },
+            title = { Text("Delete Session?") },
+            text = { Text("Do you want to delete the content along with the session history, or just remove the session entry and keep the questions in your library?") },
+            confirmButton = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = {
+                            viewModel.deleteSessionWithOptions(sessionToDelete!!, deleteAll = true)
+                            sessionToDelete = null
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Text("Delete All")
+                    }
+                    FilledTonalButton(
+                        onClick = {
+                            viewModel.deleteSessionWithOptions(sessionToDelete!!, deleteAll = false)
+                            sessionToDelete = null
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Dissociate and Delete")
+                    }
+                    
+                    TextButton(
+                        onClick = { sessionToDelete = null },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Cancel")
+                    }
+                }
+            },
+            dismissButton = null
+        )
+    }
+
     if (showLibrarySheet) {
         ModalBottomSheet(
             onDismissRequest = { showLibrarySheet = false }
@@ -86,16 +136,27 @@ fun HomeScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Text(
-                    "Library Options",
+                    "CHOOSE AN ACTION",
                     style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(bottom = 8.dp)
+                    fontWeight = FontWeight.ExtraBold,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                    letterSpacing = 1.sp
                 )
                 
                 ListItem(
-                    headlineContent = { Text("View Library") },
-                    supportingContent = { Text("Browse subjects, chapters, and topics") },
-                    leadingContent = { Icon(Icons.Rounded.Search, null) },
+                    headlineContent = { Text("View Library", fontWeight = FontWeight.SemiBold) },
+                    supportingContent = { Text("Browse organized content") },
+                    leadingContent = { 
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.Rounded.Search, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                            }
+                        }
+                    },
                     modifier = Modifier.clickable { 
                         showLibrarySheet = false
                         onNavigateToSubjects() 
@@ -103,9 +164,19 @@ fun HomeScreen(
                 )
                 
                 ListItem(
-                    headlineContent = { Text("Edit Presets") },
-                    supportingContent = { Text("Manage subjects, chapters, and topics") },
-                    leadingContent = { Icon(Icons.Rounded.Edit, null) },
+                    headlineContent = { Text("Edit Presets", fontWeight = FontWeight.SemiBold) },
+                    supportingContent = { Text("Manage subjects and chapters") },
+                    leadingContent = { 
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.Rounded.Edit, null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                            }
+                        }
+                    },
                     modifier = Modifier.clickable { 
                         showLibrarySheet = false
                         onNavigateToEditPresets() 
@@ -207,15 +278,9 @@ fun HomeScreen(
                         fontWeight = FontWeight.Bold
                     )
                 },
-                actions = {
+                windowInsets = WindowInsets(0, 0, 0, 0),
+                navigationIcon = {
                     if (isSelectionMode) {
-                        IconButton(onClick = { 
-                            viewModel.deleteSessions(selectedSessionIds.toList())
-                            isSelectionMode = false
-                            selectedSessionIds = emptySet()
-                        }) {
-                            Icon(Icons.Rounded.Delete, "Delete Selected", tint = MaterialTheme.colorScheme.error)
-                        }
                         IconButton(onClick = { 
                             isSelectionMode = false
                             selectedSessionIds = emptySet()
@@ -225,6 +290,17 @@ fun HomeScreen(
                     } else {
                         IconButton(onClick = onNavigateToSettings) {
                             Icon(Icons.Rounded.Settings, contentDescription = "Settings")
+                        }
+                    }
+                },
+                actions = {
+                    if (isSelectionMode) {
+                        IconButton(onClick = { 
+                            viewModel.deleteSessions(selectedSessionIds.toList())
+                            isSelectionMode = false
+                            selectedSessionIds = emptySet()
+                        }) {
+                            Icon(Icons.Rounded.Delete, "Delete Selected", tint = MaterialTheme.colorScheme.error)
                         }
                     }
                 }
@@ -244,6 +320,8 @@ fun HomeScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding),
+            state = listState,
+            userScrollEnabled = true, // Simplified: standard scrolling is usually fine in Compose
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -278,22 +356,39 @@ fun HomeScreen(
                     SectionHeader(title = "Recent Sessions")
                 }
 
-                items(displayToday) { session ->
+                items(displayToday, key = { it.id }) { session ->
                     val isSelected = selectedSessionIds.contains(session.id)
+                    val isExpanded = expandedSessionId == session.id && !isSelectionMode
+
                     SessionItem(
                         session = session,
                         selected = isSelected,
+                        isExpanded = isExpanded,
                         onLongClick = {
-                            isSelectionMode = true
-                            selectedSessionIds = selectedSessionIds + session.id
+                            if (!isSelectionMode) {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                expandedSessionId = if (isExpanded) null else session.id
+                            } else {
+                                selectedSessionIds = selectedSessionIds + session.id
+                            }
                         },
                         onClick = { 
                             if (isSelectionMode) {
-                                if (isSelected) selectedSessionIds -= session.id else selectedSessionIds += session.id
-                                if (selectedSessionIds.isEmpty()) isSelectionMode = false
+                                if (isSelected) {
+                                    selectedSessionIds -= session.id
+                                    if (selectedSessionIds.isEmpty()) isSelectionMode = false
+                                } else {
+                                    selectedSessionIds += session.id
+                                }
                             } else {
-                                onNavigateToSessionDetail(session.id) 
+                                if (isExpanded) expandedSessionId = null
+                                else onNavigateToSessionDetail(session.id) 
                             }
+                        },
+                        isSelectionMode = isSelectionMode,
+                        onDelete = {
+                            sessionToDelete = session.id
+                            expandedSessionId = null
                         }
                     )
                 }
@@ -305,24 +400,46 @@ fun HomeScreen(
                     SectionHeader(title = "Untagged Questions")
                 }
 
-                items(untaggedSessions) { session ->
+                items(untaggedSessions, key = { it.id }) { session ->
+                    val isSelected = selectedSessionIds.contains(session.id)
+                    val isExpanded = expandedSessionId == session.id && !isSelectionMode
+
                     SessionItem(
                         session = session,
-                        onClick = { onNavigateToSessionDetail(session.id) }
+                        selected = isSelected,
+                        isExpanded = isExpanded,
+                        onLongClick = {
+                            if (!isSelectionMode) {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                expandedSessionId = if (isExpanded) null else session.id
+                            } else {
+                                selectedSessionIds = selectedSessionIds + session.id
+                            }
+                        },
+                        onClick = { 
+                            if (isSelectionMode) {
+                                if (isSelected) {
+                                    selectedSessionIds -= session.id
+                                    if (selectedSessionIds.isEmpty()) isSelectionMode = false
+                                } else {
+                                    selectedSessionIds += session.id
+                                }
+                            } else {
+                                if (isExpanded) expandedSessionId = null
+                                else onNavigateToSessionDetail(session.id) 
+                            }
+                        },
+                        isSelectionMode = isSelectionMode,
+                        onDelete = {
+                            sessionToDelete = session.id
+                            expandedSessionId = null
+                        }
                     )
                 }
             }
             
             if (displayDue.isEmpty() && displayToday.isEmpty() && untaggedSessions.isEmpty()) {
-                item {
-                    Box(modifier = Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(
-                            "No recent sessions", 
-                            style = MaterialTheme.typography.bodyLarge,
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                }
+                // No text here as requested
             }
 
             item {
@@ -474,11 +591,19 @@ private fun SessionItem(
     session: Session, 
     onClick: () -> Unit,
     onLongClick: () -> Unit = {},
-    selected: Boolean = false
+    onDelete: () -> Unit = {},
+    selected: Boolean = false,
+    isSelectionMode: Boolean = false,
+    isExpanded: Boolean = false
 ) {
+    // Collapse if selection mode starts - handled by caller now
+    
+    val height by animateDpAsState(if (isExpanded) 120.dp else 88.dp, label = "height")
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .height(height)
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
@@ -492,53 +617,93 @@ private fun SessionItem(
             if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary.copy(alpha = 0.2f)
         )
     ) {
-        Row(
-            modifier = Modifier.padding(20.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.Center
         ) {
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.secondary,
-                modifier = Modifier.size(40.dp)
+            Row(
+                modifier = Modifier.padding(horizontal = 20.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(contentAlignment = Alignment.Center) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Rounded.CheckCircle,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSecondary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = session.title,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        val time = remember(session.id, session.completionTime, session.date) {
+                            SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(if (session.completionTime > 0) session.completionTime else session.date))
+                        }
+                        Text(
+                            text = time,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.secondary,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                    Text(
+                        text = "Completed today",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                
+                if (selected) {
                     Icon(
-                        imageVector = Icons.Rounded.CheckCircle,
+                        Icons.Rounded.CheckCircle,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSecondary,
-                        modifier = Modifier.size(24.dp)
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(start = 8.dp)
                     )
                 }
             }
-            Spacer(modifier = Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
+            
+            if (isExpanded) {
+                Spacer(Modifier.height(8.dp))
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = session.title,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false)
-                    )
-                    val time = remember(session.id, session.completionTime, session.date) {
-                        SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(if (session.completionTime > 0) session.completionTime else session.date))
+                    TextButton(onClick = { /* TODO: Rename logic if needed */ }) {
+                        Icon(Icons.Rounded.Edit, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Rename")
                     }
-                    Text(
-                        text = time,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.secondary,
-                        fontWeight = FontWeight.Medium
-                    )
+                    VerticalDivider(modifier = Modifier.height(24.dp))
+                    TextButton(
+                        onClick = { onDelete() },
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Icon(Icons.Rounded.Delete, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Delete")
+                    }
                 }
-                Text(
-                    text = "Completed today",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
         }
     }

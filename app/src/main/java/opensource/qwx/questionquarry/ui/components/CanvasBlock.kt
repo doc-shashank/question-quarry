@@ -100,12 +100,9 @@ fun BlockItem(
             
             when (block) {
                 is CanvasBlock.Text -> {
-                    val processedContent = remember(block.content) {
-                        block.content.replace("\n", "  \n")
-                    }
                     if (isReadOnly) {
                         Markdown(
-                            content = processedContent,
+                            content = block.content,
                             modifier = Modifier.fillMaxWidth()
                         )
                     } else {
@@ -132,7 +129,7 @@ fun BlockItem(
                                     .heightIn(max = 200.dp)
                             ) {
                                 Markdown(
-                                    content = processedContent,
+                                    content = block.content,
                                     modifier = Modifier.fillMaxWidth()
                                 )
                                 

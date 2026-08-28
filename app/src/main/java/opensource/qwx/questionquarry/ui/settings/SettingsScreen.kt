@@ -10,6 +10,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -30,11 +31,15 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import opensource.qwx.questionquarry.BuildConfig
 import opensource.qwx.questionquarry.util.DatabaseUtils
+import opensource.qwx.questionquarry.util.UpdateManager
+import opensource.qwx.questionquarry.util.UpdateInfo
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     viewModel: ThemeViewModel,
+    updateManager: UpdateManager,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -44,6 +49,11 @@ fun SettingsScreen(
 
     var showExportDialog by remember { mutableStateOf(value = false) }
     var showImportDialog by remember { mutableStateOf(false) }
+    
+    val scope = rememberCoroutineScope()
+    var isCheckingForUpdate by remember { mutableStateOf(false) }
+    var updateInfoState by remember { mutableStateOf<UpdateInfo?>(null) }
+    var showNoUpdateDialog by remember { mutableStateOf(false) }
 
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream")
@@ -75,7 +85,14 @@ fun SettingsScreen(
         modifier = modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
-                title = { Text("Settings", fontWeight = FontWeight.Bold) },
+                title = { 
+                    Text(
+                        "Settings", 
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    ) 
+                },
+                windowInsets = WindowInsets(0, 0, 0, 0),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
@@ -145,25 +162,26 @@ fun SettingsScreen(
 
             // About Section
             SettingsSection(title = "About", icon = Icons.Rounded.Info) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-                    )
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            text = "QuestionQuarry",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "Version ${BuildConfig.VERSION_NAME}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                AboutSection(
+                    isChecking = isCheckingForUpdate,
+                    onCheckForUpdate = {
+                        scope.launch {
+                            isCheckingForUpdate = true
+                            updateManager.checkForUpdates(force = true)
+                                .onSuccess { info ->
+                                    if (info != null) {
+                                        updateInfoState = info
+                                    } else {
+                                        showNoUpdateDialog = true
+                                    }
+                                }
+                                .onFailure { 
+                                    Toast.makeText(context, "Check failed", Toast.LENGTH_SHORT).show()
+                                }
+                            isCheckingForUpdate = false
+                        }
                     }
-                }
+                )
             }
         }
     }
@@ -211,6 +229,96 @@ fun SettingsScreen(
                 }
             }
         )
+    }
+
+    if (updateInfoState != null) {
+        AlertDialog(
+            onDismissRequest = { updateInfoState = null },
+            title = { Text("Update Available") },
+            text = { Text("A new version (${updateInfoState!!.version}) is available. Would you like to download it now?") },
+            confirmButton = {
+                Button(onClick = {
+                    updateManager.downloadAndInstall(updateInfoState!!)
+                    updateInfoState = null
+                }) {
+                    Text("Download")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { updateInfoState = null }) {
+                    Text("Later")
+                }
+            }
+        )
+    }
+
+    if (showNoUpdateDialog) {
+        AlertDialog(
+            onDismissRequest = { showNoUpdateDialog = false },
+            title = { Text("Up to Date") },
+            text = { Text("You are already on the latest version of QuestionQuarry.") },
+            confirmButton = {
+                TextButton(onClick = { showNoUpdateDialog = false }) {
+                    Text("OK")
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun AboutSection(
+    isChecking: Boolean,
+    onCheckForUpdate: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+        )
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Text(
+                "QuestionQuarry",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(Modifier.height(8.dp))
+            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "Version ${BuildConfig.VERSION_NAME}",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                
+                Button(
+                    onClick = onCheckForUpdate,
+                    enabled = !isChecking,
+                    shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp)
+                ) {
+                    if (isChecking) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                    } else {
+                        Text("Check for Updates", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+            
+            Spacer(Modifier.height(16.dp))
+            Text(
+                "An open-source tool for question management and spaced repetition.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 

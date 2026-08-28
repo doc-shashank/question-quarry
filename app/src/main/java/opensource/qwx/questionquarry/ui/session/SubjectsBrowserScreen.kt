@@ -1,10 +1,12 @@
 package opensource.qwx.questionquarry.ui.session
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
@@ -16,13 +18,48 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.serialization.Serializable
 import opensource.qwx.questionquarry.data.local.entity.Session
+import android.os.Bundle
+import androidx.compose.runtime.saveable.Saver
 
+@Serializable
 private sealed class BrowserLevel {
+    @Serializable
     data object Subjects : BrowserLevel()
+    @Serializable
     data class Chapters(val subject: String) : BrowserLevel()
+    @Serializable
     data class Topics(val subject: String, val chapter: String?) : BrowserLevel()
 }
+
+private val BrowserLevelSaver = Saver<MutableState<BrowserLevel>, Bundle>(
+    save = { state ->
+        Bundle().apply {
+            when (val level = state.value) {
+                is BrowserLevel.Subjects -> putString("type", "subjects")
+                is BrowserLevel.Chapters -> {
+                    putString("type", "chapters")
+                    putString("subject", level.subject)
+                }
+                is BrowserLevel.Topics -> {
+                    putString("type", "topics")
+                    putString("subject", level.subject)
+                    putString("chapter", level.chapter)
+                }
+            }
+        }
+    },
+    restore = { bundle ->
+        mutableStateOf(
+            when (bundle.getString("type")) {
+                "chapters" -> BrowserLevel.Chapters(bundle.getString("subject") ?: "")
+                "topics" -> BrowserLevel.Topics(bundle.getString("subject") ?: "", bundle.getString("chapter"))
+                else -> BrowserLevel.Subjects
+            }
+        )
+    }
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -31,7 +68,17 @@ fun SubjectsBrowserScreen(
     onNavigateToSessionDetail: (Long) -> Unit,
     onBack: () -> Unit,
 ) {
-    var currentLevel by remember { mutableStateOf<BrowserLevel>(BrowserLevel.Subjects) }
+    var currentLevel by rememberSaveable(saver = BrowserLevelSaver) { mutableStateOf<BrowserLevel>(BrowserLevel.Subjects) }
+
+    val handleBack = {
+        when (currentLevel) {
+            BrowserLevel.Subjects -> onBack()
+            is BrowserLevel.Chapters -> currentLevel = BrowserLevel.Subjects
+            is BrowserLevel.Topics -> currentLevel = BrowserLevel.Chapters((currentLevel as BrowserLevel.Topics).subject)
+        }
+    }
+
+    BackHandler(onBack = handleBack)
     
     val subjects by viewModel.subjects.collectAsStateWithLifecycle()
     val presetSubjects by viewModel.presetSubjects.collectAsStateWithLifecycle()
@@ -39,7 +86,13 @@ fun SubjectsBrowserScreen(
         (subjects + presetSubjects.map { it.name }).asSequence().distinct().sorted().toList()
     }
 
-    val chapters by viewModel.chapterNames.collectAsStateWithLifecycle()
+    val chapters by remember(currentLevel) {
+        if (currentLevel is BrowserLevel.Chapters) {
+            viewModel.getUnifiedChapters((currentLevel as BrowserLevel.Chapters).subject)
+        } else {
+            kotlinx.coroutines.flow.flowOf(emptyList())
+        }
+    }.collectAsStateWithLifecycle(initialValue = emptyList())
     
     // For Topics level, we need to filter sessions
     val sessions by remember(currentLevel) {
@@ -60,17 +113,14 @@ fun SubjectsBrowserScreen(
                             BrowserLevel.Subjects -> "Subjects"
                             is BrowserLevel.Chapters -> level.subject
                             is BrowserLevel.Topics -> level.chapter ?: "No Chapter"
-                        }
+                        },
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
                     )
                 },
+                windowInsets = WindowInsets(0, 0, 0, 0),
                 navigationIcon = {
-                    IconButton(onClick = {
-                        when (currentLevel) {
-                            BrowserLevel.Subjects -> onBack()
-                            is BrowserLevel.Chapters -> currentLevel = BrowserLevel.Subjects
-                            is BrowserLevel.Topics -> currentLevel = BrowserLevel.Chapters((currentLevel as BrowserLevel.Topics).subject)
-                        }
-                    }) {
+                    IconButton(onClick = handleBack) {
                         Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
                     }
                 }

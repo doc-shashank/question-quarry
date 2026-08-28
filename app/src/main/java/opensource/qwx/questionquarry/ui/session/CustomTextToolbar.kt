@@ -11,6 +11,7 @@ class CustomTextToolbar(
     val onCopyRequested: () -> Unit,
     val onCutRequested: () -> Unit,
     val onPasteRequested: () -> Unit,
+    val onSelectAllRequested: () -> Unit,
     val onBoldRequested: () -> Unit,
     val onItalicRequested: () -> Unit,
     val onUnderlineRequested: () -> Unit

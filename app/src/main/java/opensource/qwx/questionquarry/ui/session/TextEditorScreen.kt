@@ -2,6 +2,7 @@ package opensource.qwx.questionquarry.ui.session
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.CircleShape
@@ -17,23 +18,12 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.platform.LocalTextToolbar
-import androidx.compose.ui.platform.TextToolbarStatus
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupProperties
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontStyle
-import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.mohamedrejeb.richeditor.model.RichTextState
 import com.mohamedrejeb.richeditor.model.rememberRichTextState
 import com.mohamedrejeb.richeditor.ui.material3.RichTextEditor
 import com.mohamedrejeb.richeditor.ui.material3.RichTextEditorDefaults
@@ -53,38 +43,15 @@ fun TextEditorScreen(
     val block = (allBlocks.getOrNull(blockIndex) as? CanvasBlock.Text) ?: return
     
     val richTextState = rememberRichTextState()
-    val clipboardManager = LocalClipboardManager.current
-    val density = LocalDensity.current
-
-    val customTextToolbar = remember {
-        CustomTextToolbar(
-            onCopyRequested = {
-                val selection = richTextState.selection
-                if (!selection.collapsed) {
-                    val selectedText = richTextState.annotatedString.subSequence(selection.start, selection.end)
-                    clipboardManager.setText(selectedText)
-                }
-            },
-            onCutRequested = {
-                val selection = richTextState.selection
-                if (!selection.collapsed) {
-                    val selectedText = richTextState.annotatedString.subSequence(selection.start, selection.end)
-                    clipboardManager.setText(selectedText)
-                    richTextState.replaceSelectedText("") 
-                }
-            },
-            onPasteRequested = {
-                clipboardManager.getText()?.text?.let {
-                    richTextState.replaceSelectedText(it)
-                }
-            },
-            onBoldRequested = { richTextState.toggleSpanStyle(SpanStyle(fontWeight = FontWeight.Bold)) },
-            onItalicRequested = { richTextState.toggleSpanStyle(SpanStyle(fontStyle = FontStyle.Italic)) },
-            onUnderlineRequested = { 
-                richTextState.toggleSpanStyle(SpanStyle(textDecoration = TextDecoration.Underline)) 
-            }
-        )
-    }
+    
+    // Dynamic states based on current selection/cursor
+    val isBold = richTextState.currentSpanStyle.fontWeight == FontWeight.Bold
+    val isItalic = richTextState.currentSpanStyle.fontStyle == FontStyle.Italic
+    val isUnderlined = richTextState.currentSpanStyle.textDecoration?.contains(TextDecoration.Underline) == true
+    
+    var showFontSizeMenu by remember { mutableStateOf(false) }
+    var showColorMenu by remember { mutableStateOf(false) }
+    var showHighlightMenu by remember { mutableStateOf(false) }
     
     var initialContent by remember { mutableStateOf<String?>(null) }
     
@@ -102,7 +69,13 @@ fun TextEditorScreen(
     }
 
     val saveCurrentText = {
-        viewModel.updateTextBlock(pairIndex, block.id, isQuestion, richTextState.toMarkdown())
+        // Fix for unusual line breaks: 
+        // 1. Trim the markdown to remove trailing/leading whitespace.
+        // 2. Normalize multiple internal newlines.
+        val normalized = richTextState.toMarkdown()
+            .replace(Regex("\n{3,}"), "\n\n")
+            .trim()
+        viewModel.updateTextBlock(pairIndex, block.id, isQuestion, normalized)
     }
 
     val handleBack = {
@@ -132,18 +105,10 @@ fun TextEditorScreen(
             },
             dismissButton = {
                 Row {
-                    TextButton(
-                        onClick = {
-                            onBack()
-                        }
-                    ) {
+                    TextButton(onClick = { onBack() }) {
                         Text("Discard")
                     }
-                    TextButton(
-                        onClick = {
-                            showExitDialog = false
-                        }
-                    ) {
+                    TextButton(onClick = { showExitDialog = false }) {
                         Text("Cancel")
                     }
                 }
@@ -175,250 +140,249 @@ fun TextEditorScreen(
         )
     }
 
-    CompositionLocalProvider(LocalTextToolbar provides customTextToolbar) {
-        Scaffold(
-            topBar = {
-                CenterAlignedTopAppBar(
-                    title = {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Text(
-                                text = "EDIT TEXT BLOCK",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                letterSpacing = 1.2.sp
-                            )
-                            Text(
-                                text = if (isQuestion) "Question Section" else "Answer Section",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer
-                            )
-                        }
-                    },
-                    navigationIcon = {
-                        FilledTonalButton(
-                            onClick = handleBack,
-                            modifier = Modifier.padding(start = 8.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-                        ) {
-                            Icon(Icons.AutoMirrored.Rounded.ArrowBack, null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("Back")
-                        }
-                    },
-                    actions = {
-                        Button(
-                            onClick = {
-                                saveCurrentText()
-                                onBack()
-                            },
-                            modifier = Modifier.padding(end = 8.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-                        ) {
-                            Text("Finish")
-                            Spacer(Modifier.width(4.dp))
-                            Icon(
-                                Icons.Rounded.Check,
-                                null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    )
-                )
-            }
-        ) { innerPadding ->
-            Box(
-                modifier = Modifier
-                    .padding(innerPadding)
-                    .fillMaxSize()
-            ) {
-                Column(modifier = Modifier.fillMaxSize()) {
-                    // Toolbar
-                    Surface(
-                        tonalElevation = 2.dp,
-                        modifier = Modifier.fillMaxWidth(),
-                        color = MaterialTheme.colorScheme.surfaceContainerLow
+    Scaffold(
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
                     ) {
-                        LazyRow(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 8.dp, horizontal = 12.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            item {
-                                ToolbarButton(
-                                    icon = Icons.Rounded.FormatBold,
-                                    onClick = { richTextState.toggleSpanStyle(SpanStyle(fontWeight = FontWeight.Bold)) },
-                                    contentDescription = "Bold"
-                                )
-                            }
-                            item {
-                                ToolbarButton(
-                                    icon = Icons.Rounded.FormatItalic,
-                                    onClick = { richTextState.toggleSpanStyle(SpanStyle(fontStyle = FontStyle.Italic)) },
-                                    contentDescription = "Italic"
-                                )
-                            }
-                            item {
-                                ToolbarButton(
-                                    icon = Icons.Rounded.FormatUnderlined,
-                                    onClick = { richTextState.toggleSpanStyle(SpanStyle(textDecoration = TextDecoration.Underline)) },
-                                    contentDescription = "Underline"
-                                )
-                            }
-                            item {
-                                ToolbarButton(
-                                    icon = Icons.Rounded.FormatSize,
-                                    onClick = { richTextState.toggleSpanStyle(SpanStyle(fontSize = 20.sp)) },
-                                    contentDescription = "Font Size"
-                                )
-                            }
-                            item {
-                                ToolbarButton(
-                                    icon = Icons.Rounded.FontDownload,
-                                    onClick = { richTextState.toggleSpanStyle(SpanStyle(fontFamily = FontFamily.SansSerif)) },
-                                    contentDescription = "Font Type"
-                                )
-                            }
-                            item {
-                                ToolbarButton(
-                                    icon = Icons.Rounded.FormatColorText,
-                                    onClick = { richTextState.toggleSpanStyle(SpanStyle(color = Color.Red)) },
-                                    contentDescription = "Foreground Color"
-                                )
-                            }
-                            item {
-                                ToolbarButton(
-                                    icon = Icons.Rounded.FormatColorFill,
-                                    onClick = { richTextState.toggleSpanStyle(SpanStyle(background = Color.Yellow)) },
-                                    contentDescription = "Highlight Color"
-                                )
-                            }
-                            item {
-                                VerticalDivider(modifier = Modifier.height(24.dp).padding(horizontal = 4.dp))
-                            }
-                            item {
-                                IconButton(
-                                    onClick = { showDeleteDialog = true },
-                                    modifier = Modifier
-                                        .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f), CircleShape)
-                                        .size(40.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Rounded.Delete,
-                                        contentDescription = "Delete Block",
-                                        tint = MaterialTheme.colorScheme.error,
-                                        modifier = Modifier.size(20.dp)
+                        Text(
+                            text = "EDIT TEXT BLOCK",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            letterSpacing = 1.2.sp
+                        )
+                        Text(
+                            text = "Text Block ${blockIndex + 1}",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    }
+                },
+                windowInsets = WindowInsets(0, 0, 0, 0),
+                navigationIcon = {
+                    FilledTonalButton(
+                        onClick = handleBack,
+                        modifier = Modifier.padding(start = 8.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                    ) {
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Back")
+                    }
+                },
+                actions = {
+                    Button(
+                        onClick = {
+                            saveCurrentText()
+                            onBack()
+                        },
+                        modifier = Modifier.padding(end = 8.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        Text("Finish")
+                        Spacer(Modifier.width(4.dp))
+                        Icon(Icons.Rounded.Check, null, modifier = Modifier.size(18.dp))
+                    }
+                }
+            )
+        },
+        bottomBar = {
+            Surface(
+                tonalElevation = 3.dp,
+                modifier = Modifier.fillMaxWidth().navigationBarsPadding(),
+                color = MaterialTheme.colorScheme.surfaceContainer
+            ) {
+                LazyRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 12.dp, horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    item {
+                        ToolbarButton(
+                            icon = Icons.Rounded.FormatBold,
+                            onClick = { richTextState.toggleSpanStyle(SpanStyle(fontWeight = FontWeight.Bold)) },
+                            contentDescription = "Bold",
+                            selected = isBold
+                        )
+                    }
+                    item {
+                        ToolbarButton(
+                            icon = Icons.Rounded.FormatItalic,
+                            onClick = { richTextState.toggleSpanStyle(SpanStyle(fontStyle = FontStyle.Italic)) },
+                            contentDescription = "Italic",
+                            selected = isItalic
+                        )
+                    }
+                    item {
+                        ToolbarButton(
+                            icon = Icons.Rounded.FormatUnderlined,
+                            onClick = { richTextState.toggleSpanStyle(SpanStyle(textDecoration = TextDecoration.Underline)) },
+                            contentDescription = "Underline",
+                            selected = isUnderlined
+                        )
+                    }
+                    item {
+                        VerticalDivider(modifier = Modifier.height(24.dp))
+                    }
+                    item {
+                        Box {
+                            ToolbarButton(
+                                icon = Icons.Rounded.FormatSize,
+                                onClick = { showFontSizeMenu = true },
+                                contentDescription = "Font Size"
+                            )
+                            DropdownMenu(
+                                expanded = showFontSizeMenu,
+                                onDismissRequest = { showFontSizeMenu = false }
+                            ) {
+                                listOf(12, 14, 16, 18, 20, 24, 28, 32).forEach { size ->
+                                    DropdownMenuItem(
+                                        text = { Text("$size sp") },
+                                        onClick = {
+                                            richTextState.toggleSpanStyle(SpanStyle(fontSize = size.sp))
+                                            showFontSizeMenu = false
+                                        }
                                     )
                                 }
                             }
                         }
                     }
-
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
-                    ) {
-                        val focusRequester = remember { FocusRequester() }
-                        
-                        RichTextEditor(
-                            state = richTextState,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .focusRequester(focusRequester),
-                            placeholder = { Text("Write your markdown content...") },
-                            colors = RichTextEditorDefaults.richTextEditorColors(
-                                containerColor = Color.Transparent,
-                                focusedIndicatorColor = Color.Transparent,
-                                unfocusedIndicatorColor = Color.Transparent,
-                            ),
-                            textStyle = MaterialTheme.typography.bodyLarge
-                        )
-                        
-                        LaunchedEffect(Unit) {
-                            focusRequester.requestFocus()
-                        }
-                    }
-                }
-
-                // Custom Floating Toolbar
-                if (customTextToolbar.status == TextToolbarStatus.Shown) {
-                    val rect = customTextToolbar.lastRect
-                    val popupOffset = with(density) {
-                        IntOffset(
-                            x = rect.center.x.toInt(),
-                            y = (rect.bottom + 8.dp.toPx()).toInt()
-                        )
-                    }
-
-                    Popup(
-                        alignment = Alignment.TopCenter,
-                        offset = popupOffset,
-                        onDismissRequest = { customTextToolbar.hide() },
-                        properties = PopupProperties(focusable = true)
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            tonalElevation = 8.dp,
-                            shadowElevation = 8.dp,
-                            modifier = Modifier.widthIn(max = 300.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(8.dp),
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                    item {
+                        Box {
+                            ToolbarButton(
+                                icon = Icons.Rounded.FormatColorText,
+                                onClick = { showColorMenu = true },
+                                contentDescription = "Text Color",
+                                selected = richTextState.currentSpanStyle.color != Color.Unspecified
+                            )
+                            DropdownMenu(
+                                expanded = showColorMenu,
+                                onDismissRequest = { showColorMenu = false }
                             ) {
-                                ToolbarActionItem(Icons.Rounded.ContentCut, "Cut") {
-                                    customTextToolbar.onCutRequested()
-                                    customTextToolbar.hide()
-                                }
-                                ToolbarActionItem(Icons.Rounded.ContentCopy, "Copy") {
-                                    customTextToolbar.onCopyRequested()
-                                    customTextToolbar.hide()
-                                }
-                                ToolbarActionItem(Icons.Rounded.ContentPaste, "Paste") {
-                                    customTextToolbar.onPasteRequested()
-                                    customTextToolbar.hide()
-                                }
-                                VerticalDivider(modifier = Modifier.height(24.dp))
-                                ToolbarActionItem(Icons.Rounded.FormatBold, "Bold") {
-                                    customTextToolbar.onBoldRequested()
-                                }
-                                ToolbarActionItem(Icons.Rounded.FormatItalic, "Italic") {
-                                    customTextToolbar.onItalicRequested()
-                                }
-                                ToolbarActionItem(Icons.Rounded.FormatUnderlined, "Underline") {
-                                    customTextToolbar.onUnderlineRequested()
+                                val colors = listOf(
+                                    "Default" to Color.Unspecified,
+                                    "Red" to Color.Red,
+                                    "Blue" to Color(0xFF2196F3),
+                                    "Green" to Color(0xFF4CAF50),
+                                    "Orange" to Color(0xFFFF9800)
+                                )
+                                colors.forEach { (name, color) ->
+                                    DropdownMenuItem(
+                                        text = { 
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Box(modifier = Modifier.size(16.dp).background(color, CircleShape))
+                                                Spacer(Modifier.width(8.dp))
+                                                Text(name)
+                                            }
+                                        },
+                                        onClick = {
+                                            richTextState.toggleSpanStyle(SpanStyle(color = color))
+                                            showColorMenu = false
+                                        }
+                                    )
                                 }
                             }
+                        }
+                    }
+                    item {
+                        Box {
+                            ToolbarButton(
+                                icon = Icons.Rounded.FormatColorFill,
+                                onClick = { showHighlightMenu = true },
+                                contentDescription = "Highlight",
+                                selected = richTextState.currentSpanStyle.background != Color.Transparent && richTextState.currentSpanStyle.background != Color.Unspecified
+                            )
+                            DropdownMenu(
+                                expanded = showHighlightMenu,
+                                onDismissRequest = { showHighlightMenu = false }
+                            ) {
+                                val highlights = listOf(
+                                    "None" to Color.Transparent,
+                                    "Yellow" to Color.Yellow,
+                                    "Cyan" to Color.Cyan,
+                                    "Green" to Color(0xFFCCFF90),
+                                    "Pink" to Color(0xFFFF80AB)
+                                )
+                                highlights.forEach { (name, color) ->
+                                    DropdownMenuItem(
+                                        text = { 
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Box(modifier = Modifier.size(16.dp).background(color, if (color == Color.Transparent) CircleShape else RoundedCornerShape(2.dp)).border(1.dp, MaterialTheme.colorScheme.outline, if (color == Color.Transparent) CircleShape else RoundedCornerShape(2.dp)))
+                                                Spacer(Modifier.width(8.dp))
+                                                Text(name)
+                                            }
+                                        },
+                                        onClick = {
+                                            if (color == Color.Transparent) {
+                                                // Remove background by setting it to unspecified or transparent
+                                                richTextState.toggleSpanStyle(SpanStyle(background = Color.Transparent))
+                                            } else {
+                                                richTextState.toggleSpanStyle(SpanStyle(background = color))
+                                            }
+                                            showHighlightMenu = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    item {
+                        VerticalDivider(modifier = Modifier.height(24.dp))
+                    }
+                    item {
+                        IconButton(
+                            onClick = { showDeleteDialog = true },
+                            modifier = Modifier
+                                .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f), CircleShape)
+                                .size(40.dp)
+                        ) {
+                            Icon(
+                                Icons.Rounded.Delete,
+                                contentDescription = "Delete",
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(20.dp)
+                            )
                         }
                     }
                 }
             }
         }
-    }
-}
-
-@Composable
-fun ToolbarActionItem(
-    icon: ImageVector,
-    contentDescription: String,
-    onClick: () -> Unit
-) {
-    IconButton(onClick = onClick, modifier = Modifier.size(36.dp)) {
-        Icon(icon, contentDescription, modifier = Modifier.size(20.dp))
+    ) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .padding(innerPadding)
+                .fillMaxSize()
+                .padding(16.dp)
+        ) {
+            val focusRequester = remember { FocusRequester() }
+            
+            RichTextEditor(
+                state = richTextState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .focusRequester(focusRequester),
+                placeholder = { Text("Write your markdown content...") },
+                colors = RichTextEditorDefaults.richTextEditorColors(
+                    containerColor = Color.Transparent,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                ),
+                textStyle = MaterialTheme.typography.bodyLarge
+            )
+            
+            LaunchedEffect(Unit) {
+                focusRequester.requestFocus()
+            }
+        }
     }
 }
 
@@ -426,14 +390,18 @@ fun ToolbarActionItem(
 fun ToolbarButton(
     icon: ImageVector,
     onClick: () -> Unit,
-    contentDescription: String
+    contentDescription: String,
+    selected: Boolean = false
 ) {
     FilledTonalIconButton(
         onClick = onClick,
         modifier = Modifier.size(40.dp),
-        shape = RoundedCornerShape(10.dp)
+        shape = RoundedCornerShape(10.dp),
+        colors = IconButtonDefaults.filledTonalIconButtonColors(
+            containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+            contentColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+        )
     ) {
         Icon(icon, contentDescription, modifier = Modifier.size(20.dp))
     }
 }
-
